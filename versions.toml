@@ -24,3 +24,9 @@ jp6_native = "humble"  # L4T r36 rootfs is Ubuntu 22.04
 [deepstream]
 version = "pinned-per-container"  # resolve against JetPack at container build,
                                   # verify with a smoke golden, record actual
+
+[models]               # model IDs per routing tier (section 9); code reads
+                       # these via config, never hardcodes them
+opus = "claude-opus-4-8"
+sonnet = "claude-sonnet-5"
+haiku = "claude-haiku-4-5"

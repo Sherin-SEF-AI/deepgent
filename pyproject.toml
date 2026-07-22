@@ -7,10 +7,19 @@ authors = [{ name = "Sherin Joseph Roy" }]
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "claude-agent-sdk==0.2.125",
+    "pydantic-settings>=2.14.2",
+    "structlog>=26.1.0",
+    "typer>=0.27.0",
+]
 
 [project.urls]
 Repository = "https://github.com/Sherin-SEF-AI/deepgent"
+
+[project.scripts]
+deepgent = "deepgent.cli:app"
+dg = "deepgent.cli:app"
 
 [dependency-groups]
 dev = [
@@ -29,6 +38,9 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["typer.Argument", "typer.Option"]
 
 [tool.mypy]
 strict = true

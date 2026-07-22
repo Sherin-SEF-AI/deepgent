@@ -108,14 +108,58 @@ deepgent/
   .claude/                   # settings.json, agents/, hooks config for dev
 ```
 
+### Current implementation state (Phase 0, WO-2)
+
+The layout above is the end-state target. What actually exists on disk right
+now:
+
+- `cli/main.py`: typer `app` implementing only `deepgent "<task>"`, `deepgent
+  init`, `deepgent doctor`, `--version`. The rest of the section 15 CLI
+  surface (`plan`, `run`, `resume`, `boards`, `evals`, `skills`, `rag`,
+  `report`, `ci`, `sweep`) is not built yet.
+- `core/orchestrator.py`: `Orchestrator.build_options()` /
+  `.run_task()` wraps a single one-shot `claude_agent_sdk.query()` call with
+  every section 7 field set explicitly. `ClaudeSDKClient` interactive mode,
+  the deterministic intake classifier (task always runs on the sonnet tier),
+  and `hooks=` (currently `{}`) all arrive in later work orders. Tests
+  monkeypatch the module-level `deepgent.core.orchestrator._run_query` seam,
+  never `claude_agent_sdk.query` directly.
+- `agents/definitions.py`: `build_agent_definitions()` returns the five
+  `AgentDefinition`s from the section 8 table with models resolved from
+  `settings.models`. The `mcp__knowledge`, `mcp__board_farm`, `mcp__generators`
+  tool grants are inert: no MCP servers are wired into
+  `ClaudeAgentOptions.mcp_servers` yet (it is `{}` in `build_options()`).
+- `config/settings.py`: `load_settings()` merges, lowest precedence first,
+  `versions.toml [models]` -> `~/.deepgent/config.toml` ->
+  `.deepgent/config.toml` (project) -> `DEEPGENT_` env vars (double underscore
+  for nesting, e.g. `DEEPGENT_BUDGET__PER_TASK_USD`). Model IDs only ever come
+  from `versions.toml`; nothing else may set them.
+- `errors.py`: flat `DeepgentError` -> `ConfigError` / `TaskExecutionError`
+  hierarchy. The CLI callback catches `DeepgentError` at the top level and
+  prints `error: <message>` with exit code 1; raw tracebacks only under
+  `--debug`.
+- `hooks/`, `generators/`, `containers/`, `boards/`, `knowledge/`, `evals/`,
+  `telemetry/` are stub packages: a docstring only, no logic yet. Their
+  presence and docstrings are enforced by
+  `tests/test_scaffold.py::test_subpackage_imports`; keep that test green when
+  adding a new subpackage.
+- `tests/` mirrors `src/` roughly 1:1 (`test_core.py`, `test_config.py`,
+  `test_agents.py`, `test_cli.py`) plus `test_scaffold.py`, which pins
+  packaging metadata (`deepgent.__version__ == pyproject.toml` version), the
+  `versions.toml` schema, and subpackage docstrings. Update it alongside any
+  version bump or new subpackage.
+
 ## 5. Environment and tooling
 
 - Python 3.12. `uv` for everything: `uv sync`, `uv run`, `uv build`. Never pip
   directly, never poetry.
 - Lint/format: `ruff check --fix` and `ruff format`. Types: `mypy --strict` on
-  `src/`. Both are CI gates.
+  `src/`. Both are CI gates (CI also runs `ruff format --check`).
 - Tests: `pytest -m "not hardware"` locally and in CI;
-  `pytest -m hardware` only via the board runner workflow.
+  `pytest -m hardware` only via the board runner workflow. Single file:
+  `uv run pytest tests/test_cli.py`; single test:
+  `uv run pytest tests/test_cli.py::test_version_flag -v`; by name pattern:
+  `uv run pytest -k <pattern>`.
 - Containers: Docker with buildx. aarch64 cross builds use qemu binfmt. Jetson
   containers base on `nvcr.io/nvidia/l4t-*` images matching `versions.toml`.
 - Commit style: conventional commits (`feat:`, `fix:`, `chore:`, `eval:`,
