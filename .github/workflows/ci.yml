@@ -26,7 +26,7 @@ jobs:
         run: uv run ruff format --check
 
       - name: Type check
-        run: uv run mypy src/
+        run: uv run mypy
 
       - name: Unit tests
         run: uv run pytest -m "not hardware"
