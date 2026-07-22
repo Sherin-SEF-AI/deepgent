@@ -307,6 +307,39 @@ def evals_run(
     typer.secho(f"{task} PASSED", fg=typer.colors.GREEN)
 
 
+@app.command("ci")
+def ci_run(
+    task: str = typer.Option(..., "--task", help="Task to run non-interactively."),
+    budget: float | None = typer.Option(None, "--budget", help="Per-task budget cap in USD."),
+) -> None:
+    """Non-interactive CI mode: JSON to stdout, exit code is pass/fail,
+    gated board operations auto-deny unless whitelisted (section 15)."""
+    import json as json_module
+
+    _configure_logging(False)
+    try:
+        settings = load_settings().model_copy(update={"ci": True}, deep=True)
+        if budget is not None:
+            settings.budget.per_task_usd = budget
+        orchestrator = Orchestrator(settings=settings, cwd=Path.cwd())
+        outcome = asyncio.run(orchestrator.run_task(task))
+    except DeepgentError as exc:
+        typer.echo(json_module.dumps({"ok": False, "error": str(exc)}))
+        raise typer.Exit(code=1) from None
+    typer.echo(
+        json_module.dumps(
+            {
+                "ok": not outcome.is_error,
+                "result": outcome.result,
+                "session_id": outcome.session_id,
+                "num_turns": outcome.num_turns,
+                "total_cost_usd": outcome.total_cost_usd,
+            }
+        )
+    )
+    raise typer.Exit(code=1 if outcome.is_error else 0)
+
+
 @app.command("versions-check", hidden=True)
 def versions_check(
     debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),

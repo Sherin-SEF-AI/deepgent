@@ -83,6 +83,43 @@ def _hermetic_host(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.unit
+def test_ci_mode_emits_json_and_enables_ci_settings(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import json
+
+    import deepgent.cli.main as cli_main
+    from deepgent.core import TaskOutcome
+
+    captured = {}
+
+    class FakeOrchestrator:
+        def __init__(self, settings: object, cwd: Path) -> None:
+            captured["settings"] = settings
+
+        async def run_task(self, task: str) -> TaskOutcome:
+            return TaskOutcome(
+                result="done",
+                is_error=False,
+                num_turns=2,
+                total_cost_usd=0.05,
+                session_id="sess-ci",
+            )
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.chdir(REPO_ROOT)
+    monkeypatch.setattr(cli_main, "Orchestrator", FakeOrchestrator)
+    result = runner.invoke(app, ["ci", "--task", "build it", "--budget", "0.75"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output.strip().splitlines()[-1])
+    assert payload["ok"] is True
+    assert payload["session_id"] == "sess-ci"
+    settings = captured["settings"]
+    assert settings.ci is True  # type: ignore[attr-defined]
+    assert settings.budget.per_task_usd == 0.75  # type: ignore[attr-defined]
+
+
+@pytest.mark.unit
 def test_doctor_passes_with_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(REPO_ROOT)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
