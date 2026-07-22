@@ -1,0 +1,27 @@
+name: hardware
+
+# Runs hardware-marked tests on a self-hosted runner attached to the board
+# farm. Manual trigger only; the runner must have the boards registered in
+# ~/.deepgent/boards.toml and their host keys trusted.
+on:
+  workflow_dispatch:
+
+jobs:
+  board-tests:
+    runs-on: [self-hosted, deepgent-hw]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+
+      - name: Sync dependencies
+        run: uv sync --dev
+
+      - name: Hardware tests
+        run: uv run pytest -m hardware -v
+
+      - name: Golden gt-0001
+        run: uv run deepgent evals run --task gt-0001

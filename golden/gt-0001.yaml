@@ -1,0 +1,23 @@
+# Phase 0 golden: build, deploy, and run the trivial CUDA kernel on the
+# AGX Orin, capturing tegrastats (CLAUDE.md section 22).
+id: gt-0001
+title: Build, deploy, and run vector_add on agx-orin with tegrastats capture
+class: bringup/cuda-smoke
+board: agx-orin
+skills: []
+inputs: {}
+success:
+  - metric: run_exit_code
+    op: "=="
+    value: 0
+  - metric: kernel_ok
+    op: "=="
+    value: 1
+  - metric: tegrastats_samples
+    op: ">="
+    value: 5
+  - metric: wall_s
+    op: "<="
+    value: 60
+budget_usd: 0.00
+timeout_min: 10

@@ -22,11 +22,21 @@ from typer._click.exceptions import UsageError
 from typer.core import TyperGroup
 
 import deepgent
+from deepgent.boards import (
+    BoardConfig,
+    BoardRunner,
+    add_board,
+    get_board,
+    load_registry,
+    registry_path,
+    remove_board,
+)
 from deepgent.config import load_settings
 from deepgent.containers import ContainerBuilder, load_jp6_spec
 from deepgent.containers.build import BINFMT_FLAG
 from deepgent.core import Orchestrator
 from deepgent.errors import DeepgentError
+from deepgent.evals import run_golden
 
 
 class DeepgentGroup(TyperGroup):
@@ -48,6 +58,10 @@ class DeepgentGroup(TyperGroup):
 app = typer.Typer(add_completion=False, cls=DeepgentGroup)
 containers_app = typer.Typer(help="Build and verify toolchain containers.")
 app.add_typer(containers_app, name="containers")
+boards_app = typer.Typer(help="Manage the target board registry.")
+app.add_typer(boards_app, name="boards")
+evals_app = typer.Typer(help="Run golden tasks and score them mechanically.")
+app.add_typer(evals_app, name="evals")
 
 _PROJECT_MD = """\
 # deepgent project state
@@ -153,6 +167,121 @@ def containers_build(
     typer.secho(f"built {builder.spec.image_tag}", fg=typer.colors.GREEN)
     if smoke:
         typer.secho("CUDA smoke check passed (aarch64 ELF)", fg=typer.colors.GREEN)
+
+
+@boards_app.command("add")
+def boards_add(
+    board_id: str = typer.Argument(..., help="Board id, e.g. agx-orin."),
+    host: str = typer.Option(..., "--host", help="Hostname or IP of the board."),
+    ssh_user: str = typer.Option(..., "--user", help="SSH user on the board."),
+    key_path: Path = typer.Option(..., "--key", help="Path to the per-board SSH private key."),
+    board_type: str = typer.Option(..., "--type", help="Board type, e.g. jetson-agx-orin."),
+    l4t: str | None = typer.Option(None, "--l4t", help="L4T version on the board."),
+    capabilities: str = typer.Option(
+        "", "--capabilities", help="Comma-separated capabilities (csi,can,gpio,hailo)."
+    ),
+    power_ctl: str = typer.Option("none", "--power-ctl", help="none, smartplug, or pdu."),
+    debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
+) -> None:
+    """Register a board in ~/.deepgent/boards.toml."""
+    caps = [c.strip() for c in capabilities.split(",") if c.strip()]
+    try:
+        board = BoardConfig(
+            id=board_id,
+            host=host,
+            ssh_user=ssh_user,
+            key_path=key_path,
+            type=board_type,
+            l4t=l4t,
+            capabilities=caps,
+            power_ctl=power_ctl,  # type: ignore[arg-type]
+        )
+        add_board(board)
+    except (DeepgentError, ValueError) as exc:
+        _fail(str(exc), debug=debug, exc=exc if isinstance(exc, DeepgentError) else None)
+        return
+    typer.secho(f"registered board '{board_id}' in {registry_path()}", fg=typer.colors.GREEN)
+
+
+@boards_app.command("list")
+def boards_list() -> None:
+    """List registered boards."""
+    boards = load_registry()
+    if not boards:
+        typer.echo(
+            f"no boards registered; add one with: deepgent boards add (see {registry_path()})"
+        )
+        return
+    for board in boards.values():
+        caps = ",".join(board.capabilities) or "-"
+        typer.echo(
+            f"{board.id}  {board.ssh_user}@{board.host}  type={board.type}  "
+            f"l4t={board.l4t or '-'}  caps={caps}  power={board.power_ctl}"
+        )
+
+
+@boards_app.command("test")
+def boards_test(
+    board_id: str = typer.Argument(..., help="Board id to test."),
+    debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
+) -> None:
+    """Connect to a board and verify it answers."""
+    _configure_logging(debug)
+
+    async def _probe() -> str:
+        board = get_board(board_id)
+        async with BoardRunner(board) as runner:
+            result = await runner.run("uname -m && uname -r", timeout_s=15)
+            if result.exit_status != 0:
+                raise DeepgentError(
+                    f"probe command failed on '{board_id}' "
+                    f"(exit {result.exit_status}): {result.stderr.strip()}"
+                )
+            return result.stdout.strip()
+
+    try:
+        answer = asyncio.run(_probe())
+    except DeepgentError as exc:
+        _fail(str(exc), debug=debug, exc=exc)
+        return
+    typer.secho(f"board '{board_id}' ok: {answer.replace(chr(10), ' / ')}", fg=typer.colors.GREEN)
+
+
+@boards_app.command("remove")
+def boards_remove(
+    board_id: str = typer.Argument(..., help="Board id to remove."),
+    debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
+) -> None:
+    """Remove a board from the registry."""
+    try:
+        remove_board(board_id)
+    except DeepgentError as exc:
+        _fail(str(exc), debug=debug, exc=exc)
+        return
+    typer.echo(f"removed board '{board_id}'")
+
+
+@evals_app.command("run")
+def evals_run(
+    task: str = typer.Option(..., "--task", help="Golden task id, e.g. gt-0001."),
+    debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
+) -> None:
+    """Run one golden task and score it mechanically."""
+    _configure_logging(debug)
+    try:
+        result = asyncio.run(run_golden(task, Path.cwd()))
+    except DeepgentError as exc:
+        _fail(str(exc), debug=debug, exc=exc)
+        return
+    for criterion in result.criteria:
+        color = typer.colors.GREEN if criterion.passed else typer.colors.RED
+        typer.secho(criterion.describe(), fg=color)
+    typer.echo(f"artifacts: {result.run_dir}")
+    if result.passed:
+        typer.secho(f"{task} PASSED", fg=typer.colors.GREEN)
+        return
+    typer.secho(f"{task} FAILED", fg=typer.colors.RED)
+    raise typer.Exit(code=1)
 
 
 @app.command()

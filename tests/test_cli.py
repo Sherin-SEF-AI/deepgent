@@ -73,10 +73,20 @@ def test_bare_task_dispatches_to_orchestrator(monkeypatch: pytest.MonkeyPatch) -
     assert "fake result" in result.output
 
 
+def _hermetic_host(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pin host-dependent doctor checks (uv/docker/binfmt) to healthy values
+    so these tests do not depend on the CI machine's state."""
+    import deepgent.cli.main as cli_main
+
+    monkeypatch.setattr(cli_main.shutil, "which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(cli_main.platform, "machine", lambda: "aarch64")
+
+
 @pytest.mark.unit
 def test_doctor_passes_with_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(REPO_ROOT)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    _hermetic_host(monkeypatch)
     result = runner.invoke(app, ["doctor"])
     assert result.exit_code == 0, result.output
     assert "all checks passed" in result.output
@@ -86,6 +96,7 @@ def test_doctor_passes_with_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_doctor_fails_without_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(REPO_ROOT)
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    _hermetic_host(monkeypatch)
     result = runner.invoke(app, ["doctor"])
     assert result.exit_code == 1
     assert "ANTHROPIC_API_KEY is not set" in result.output

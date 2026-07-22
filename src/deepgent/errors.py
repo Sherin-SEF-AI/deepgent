@@ -15,3 +15,11 @@ class TaskExecutionError(DeepgentError):
 
 class ContainerError(DeepgentError):
     """A toolchain container could not be built or verified."""
+
+
+class BoardError(DeepgentError):
+    """A board is unregistered, unreachable, or misbehaved during a run."""
+
+
+class GoldenError(DeepgentError):
+    """A golden task definition or run is invalid."""

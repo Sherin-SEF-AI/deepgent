@@ -139,28 +139,46 @@ class ContainerBuilder:
             f"/src/{SMOKE_SOURCE}",
         ]
 
+    def compile_smoke(self, out_dir: Path) -> Path:
+        """Compile the smoke kernel into out_dir and return the verified
+        aarch64 binary path."""
+        self.preflight()
+        command = self.smoke_command(out_dir)
+        _logger.info("cuda_smoke_started", tag=self._spec.image_tag)
+        completed = subprocess.run(command, check=False)
+        if completed.returncode != 0:
+            raise ContainerError(
+                f"nvcc smoke compile failed (exit {completed.returncode}) "
+                f"in {self._spec.image_tag}; see output above"
+            )
+        binary = out_dir / "vector_add"
+        if not binary.is_file():
+            raise ContainerError(
+                "nvcc reported success but produced no binary; the container output mount is broken"
+            )
+        header = binary.read_bytes()[:20]
+        if not elf_is_aarch64(header):
+            raise ContainerError(
+                f"smoke binary is not an aarch64 ELF; the image was not built for {PLATFORM}"
+            )
+        _logger.info("cuda_smoke_passed", tag=self._spec.image_tag)
+        return binary
+
     def cuda_smoke(self) -> None:
         """Compile the smoke kernel in-container and verify an aarch64 ELF."""
-        self.preflight()
         with tempfile.TemporaryDirectory(prefix="deepgent-smoke-") as tmp:
-            out_dir = Path(tmp)
-            command = self.smoke_command(out_dir)
-            _logger.info("cuda_smoke_started", tag=self._spec.image_tag)
-            completed = subprocess.run(command, check=False)
-            if completed.returncode != 0:
-                raise ContainerError(
-                    f"nvcc smoke compile failed (exit {completed.returncode}) "
-                    f"in {self._spec.image_tag}; see output above"
-                )
-            binary = out_dir / "vector_add"
-            if not binary.is_file():
-                raise ContainerError(
-                    "nvcc reported success but produced no binary; the "
-                    "container output mount is broken"
-                )
-            header = binary.read_bytes()[:20]
-            if not elf_is_aarch64(header):
-                raise ContainerError(
-                    f"smoke binary is not an aarch64 ELF; the image was not built for {PLATFORM}"
-                )
-        _logger.info("cuda_smoke_passed", tag=self._spec.image_tag)
+            self.compile_smoke(Path(tmp))
+
+    def image_exists(self) -> bool:
+        """True when the image is already present locally."""
+        completed = subprocess.run(
+            ["docker", "image", "inspect", self._spec.image_tag],
+            check=False,
+            capture_output=True,
+        )
+        return completed.returncode == 0
+
+    def ensure_image(self) -> None:
+        """Build the image only if it is not already present."""
+        if not self.image_exists():
+            self.build()
