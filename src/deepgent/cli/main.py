@@ -591,6 +591,104 @@ def rag_search(
         typer.echo("")
 
 
+@rag_app.command("triage")
+def rag_triage(
+    symptom: str = typer.Argument(..., help="Failure symptom text."),
+    hw: str | None = typer.Option(None, "--hw", help="Hardware config filter."),
+    debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
+) -> None:
+    """Corpus-first debugging: check the failure corpus before any LLM call (Tier 2)."""
+    from deepgent.knowledge import triage as run_triage
+
+    _configure_logging(debug)
+    try:
+        settings = load_settings()
+        client = build_rag_client(settings)
+
+        async def _go() -> Any:
+            try:
+                return await run_triage(client, symptom, hw=hw)
+            finally:
+                await client.aclose()
+
+        result = asyncio.run(_go())
+    except DeepgentError as exc:
+        _fail(str(exc), debug=debug, exc=exc)
+        return
+    typer.echo(result.render())
+    raise typer.Exit(code=0 if result.corpus_hit else 2)
+
+
+@rag_app.command("upgrade-check")
+def rag_upgrade_check(
+    component: str = typer.Argument(..., help="Stack component, e.g. trt."),
+    to_version: str = typer.Argument(..., help="Proposed new version."),
+    debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
+) -> None:
+    """Verified impact report for a proposed version move (Tier 2)."""
+    from deepgent.config import load_versions
+    from deepgent.knowledge import upgrade_check
+
+    _configure_logging(debug)
+    try:
+        versions = load_versions()
+        jp6 = versions["jetson"]["jp6"]
+        current = {
+            "l4t": str(jp6["l4t"]),
+            "cuda": str(jp6["cuda"]),
+            "trt": str(jp6["tensorrt"]),
+        }
+        settings = load_settings()
+        client = build_rag_client(settings)
+
+        async def _go() -> Any:
+            try:
+                return await upgrade_check(client, current, {component: to_version})
+            finally:
+                await client.aclose()
+
+        report = asyncio.run(_go())
+    except DeepgentError as exc:
+        _fail(str(exc), debug=debug, exc=exc)
+        return
+    except KeyError as exc:
+        _fail(f"versions.toml [jetson.jp6] missing key {exc}", debug=debug)
+        return
+    typer.echo(report.render())
+    raise typer.Exit(code=0 if report.safe else 1)
+
+
+@app.command("errata-scan")
+def errata_scan_cmd(
+    chips: str = typer.Option(..., "--chips", help="Comma-separated BOM chip ids."),
+    errata_file: Path = typer.Option(..., "--errata", help="Errata definitions JSON file."),
+    debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
+) -> None:
+    """Scan the codebase for patterns from errata affecting BOM chips (Tier 2)."""
+    import json as json_module
+
+    from deepgent.knowledge import Erratum, scan_errata
+
+    _configure_logging(debug)
+    if not errata_file.is_file():
+        _fail(f"{errata_file} does not exist", debug=debug)
+    entries = json_module.loads(errata_file.read_text())
+    errata = [
+        Erratum(
+            id=e["id"],
+            chip=e["chip"],
+            title=e.get("title", ""),
+            patterns=tuple(e["patterns"]),
+            advisory=e.get("advisory", ""),
+        )
+        for e in entries
+    ]
+    bom = {c.strip() for c in chips.split(",") if c.strip()}
+    result = scan_errata(Path.cwd(), errata, bom)
+    typer.echo(result.render_advisory())
+    raise typer.Exit(code=1 if result.exposed else 0)
+
+
 @skills_app.command("list")
 def skills_list(
     debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
