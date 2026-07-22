@@ -30,3 +30,24 @@ version = "pinned-per-container"  # resolve against JetPack at container build,
 opus = "claude-opus-4-8"
 sonnet = "claude-sonnet-5"
 haiku = "claude-haiku-4-5"
+
+# List prices in USD per million tokens, verified 2026-07-22 against the
+# Anthropic pricing docs. Used by budget_guard for in-flight spend estimation;
+# the billed figure always comes from the API result message.
+[pricing.opus]
+input = 5.00
+output = 25.00
+cache_read = 0.50
+cache_write = 6.25
+
+[pricing.sonnet]
+input = 3.00
+output = 15.00
+cache_read = 0.30
+cache_write = 3.75
+
+[pricing.haiku]
+input = 1.00
+output = 5.00
+cache_read = 0.10
+cache_write = 1.25

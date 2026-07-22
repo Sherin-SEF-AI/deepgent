@@ -80,3 +80,20 @@ def test_versions_toml_without_models_raises(tmp_path: Path) -> None:
     (tmp_path / "versions.toml").write_text('[jetson.jp6]\njetpack = "6.2"\n')
     with pytest.raises(ConfigError, match=r"no \[models\] table"):
         load_settings(tmp_path)
+
+
+@pytest.mark.unit
+def test_versions_toml_without_pricing_raises(tmp_path: Path) -> None:
+    (tmp_path / "versions.toml").write_text('[models]\nopus = "o"\nsonnet = "s"\nhaiku = "h"\n')
+    with pytest.raises(ConfigError, match=r"no \[pricing\] table"):
+        load_settings(tmp_path)
+
+
+@pytest.mark.unit
+def test_pricing_comes_from_versions_toml() -> None:
+    settings = load_settings(REPO_ROOT)
+    with (REPO_ROOT / "versions.toml").open("rb") as f:
+        expected = tomllib.load(f)["pricing"]
+    assert settings.pricing.sonnet.input == expected["sonnet"]["input"]
+    assert settings.pricing.opus.output == expected["opus"]["output"]
+    assert settings.pricing.haiku.cache_read == expected["haiku"]["cache_read"]

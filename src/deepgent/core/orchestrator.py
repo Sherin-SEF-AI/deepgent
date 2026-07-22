@@ -14,7 +14,9 @@ from claude_agent_sdk import (
 
 from deepgent.agents import build_agent_definitions
 from deepgent.config import DeepgentSettings
+from deepgent.core.budget import BudgetTracker
 from deepgent.errors import TaskExecutionError
+from deepgent.hooks import build_hooks
 
 _logger = structlog.get_logger(__name__)
 
@@ -56,16 +58,18 @@ class Orchestrator:
         self._cwd = cwd
         self._max_turns = max_turns if max_turns is not None else settings.max_turns
 
-    def build_options(self) -> ClaudeAgentOptions:
+    def build_options(self, tracker: BudgetTracker | None = None) -> ClaudeAgentOptions:
         """Session options with every field from CLAUDE.md section 7 set
         explicitly; nothing relies on ambient defaults."""
+        if tracker is None:
+            tracker = BudgetTracker(self._settings)
         return ClaudeAgentOptions(
             allowed_tools=list(MAIN_SESSION_TOOLS),
             disallowed_tools=[],
             permission_mode=self._settings.permission_mode,
             mcp_servers={},
             agents=build_agent_definitions(self._settings),
-            hooks={},  # enforcement hooks (scope_lock, safety_gate, budget_guard) land in WO-3
+            hooks=build_hooks(self._settings, tracker),
             setting_sources=["project"],
             cwd=self._cwd,
             max_turns=self._max_turns,
@@ -76,13 +80,15 @@ class Orchestrator:
 
     async def run_task(self, task: str) -> TaskOutcome:
         """Run a single task to completion and return its outcome."""
-        options = self.build_options()
+        tracker = BudgetTracker(self._settings)
+        options = self.build_options(tracker)
         log = _logger.bind(cwd=str(self._cwd), model=options.model)
         log.info("task_started", task=task)
 
         result: ResultMessage | None = None
         async for message in _run_query(prompt=task, options=options):
             if isinstance(message, AssistantMessage):
+                tracker.record_usage(message.model, message.usage)
                 for block in message.content:
                     if isinstance(block, TextBlock):
                         log.debug("assistant_text", text=block.text)

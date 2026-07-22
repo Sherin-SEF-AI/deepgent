@@ -38,6 +38,23 @@ class BudgetSettings(BaseModel):
     per_task_usd: float = 2.00
 
 
+class TierPricing(BaseModel):
+    """List prices in USD per million tokens. Sourced from versions.toml."""
+
+    input: float
+    output: float
+    cache_read: float
+    cache_write: float
+
+
+class PricingTiers(BaseModel):
+    """Per-tier pricing used for in-flight budget estimation."""
+
+    opus: TierPricing
+    sonnet: TierPricing
+    haiku: TierPricing
+
+
 class DeepgentSettings(BaseSettings):
     """Runtime settings, overridable via DEEPGENT_ environment variables."""
 
@@ -46,11 +63,13 @@ class DeepgentSettings(BaseSettings):
     )
 
     models: ModelTiers
+    pricing: PricingTiers
     budget: BudgetSettings = BudgetSettings()
     default_board: str | None = None
     telemetry_enabled: bool = True
     permission_mode: PermissionMode = "default"
     max_turns: int = 50
+    ci: bool = False
 
 
 class _MappingSource(PydanticBaseSettingsSource):
@@ -104,9 +123,13 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
 def _merged_file_config(project_root: Path | None) -> dict[str, Any]:
     versions_path = find_versions_file(project_root)
     versions = _read_toml(versions_path)
-    if "models" not in versions:
-        raise ConfigError(f"{versions_path} has no [models] table")
-    data: dict[str, Any] = {"models": versions["models"]}
+    for table in ("models", "pricing"):
+        if table not in versions:
+            raise ConfigError(f"{versions_path} has no [{table}] table")
+    data: dict[str, Any] = {
+        "models": versions["models"],
+        "pricing": versions["pricing"],
+    }
 
     root = project_root if project_root is not None else versions_path.parent
     for config_path in [Path.home() / CONFIG_RELPATH, root / CONFIG_RELPATH]:

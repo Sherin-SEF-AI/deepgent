@@ -28,7 +28,8 @@ def test_options_set_all_section_7_fields(settings: DeepgentSettings) -> None:
     assert options.permission_mode == settings.permission_mode
     assert options.mcp_servers == {}
     assert options.agents is not None and len(options.agents) == 5
-    assert options.hooks == {}
+    assert options.hooks is not None
+    assert set(options.hooks) == {"UserPromptSubmit", "PreToolUse", "PostToolUse"}
     assert options.setting_sources == ["project"]
     assert options.cwd == REPO_ROOT
     assert options.max_turns == settings.max_turns
@@ -71,6 +72,34 @@ def test_run_task_returns_outcome(
     assert outcome.num_turns == 3
     assert outcome.total_cost_usd == 0.42
     assert outcome.session_id == "sess-test"
+
+
+@pytest.mark.unit
+def test_run_task_feeds_budget_tracker(
+    settings: DeepgentSettings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from deepgent.core.budget import BudgetTracker
+
+    async def fake_query(**_: Any) -> AsyncIterator[Any]:
+        yield AssistantMessage(
+            content=[TextBlock(text="working")],
+            model=settings.models.sonnet,
+            usage={"output_tokens": 1_000_000},
+        )
+        yield _result_message()
+
+    trackers: list[BudgetTracker] = []
+    original = BudgetTracker.record_usage
+
+    def spy(self: BudgetTracker, model: str, usage: Any) -> None:
+        trackers.append(self)
+        original(self, model, usage)
+
+    monkeypatch.setattr(orchestrator_module, "_run_query", fake_query)
+    monkeypatch.setattr(BudgetTracker, "record_usage", spy)
+    _run(Orchestrator(settings=settings, cwd=REPO_ROOT), "build it")
+    assert trackers, "orchestrator never fed the budget tracker"
+    assert trackers[0].spent_usd == pytest.approx(settings.pricing.sonnet.output)
 
 
 @pytest.mark.unit
