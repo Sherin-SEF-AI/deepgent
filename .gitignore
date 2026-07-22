@@ -19,3 +19,6 @@ build/
 
 # deepgent run artifacts and local project state (never committed)
 .deepgent/
+
+# synced skill packs (generated from skills/ at context assembly)
+.claude/skills/

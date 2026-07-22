@@ -21,8 +21,8 @@ def settings() -> DeepgentSettings:
 
 
 @pytest.mark.unit
-def test_options_set_all_section_7_fields(settings: DeepgentSettings) -> None:
-    options = Orchestrator(settings=settings, cwd=REPO_ROOT).build_options()
+def test_options_set_all_section_7_fields(settings: DeepgentSettings, tmp_path: Path) -> None:
+    options = Orchestrator(settings=settings, cwd=tmp_path).build_options()
     assert options.allowed_tools == orchestrator_module.MAIN_SESSION_TOOLS
     assert options.disallowed_tools == []
     assert options.permission_mode == settings.permission_mode
@@ -31,14 +31,17 @@ def test_options_set_all_section_7_fields(settings: DeepgentSettings) -> None:
     assert options.hooks is not None
     assert set(options.hooks) == {"UserPromptSubmit", "PreToolUse", "PostToolUse"}
     assert options.setting_sources == ["project"]
-    assert options.cwd == REPO_ROOT
+    assert options.cwd == tmp_path
     assert options.max_turns == settings.max_turns
     assert options.model == settings.models.sonnet
+    # Context assembly synced the skill packs into the session project.
+    assert options.skills
+    assert (tmp_path / ".claude" / "skills").is_dir()
 
 
 @pytest.mark.unit
-def test_max_turns_override(settings: DeepgentSettings) -> None:
-    options = Orchestrator(settings=settings, cwd=REPO_ROOT, max_turns=7).build_options()
+def test_max_turns_override(settings: DeepgentSettings, tmp_path: Path) -> None:
+    options = Orchestrator(settings=settings, cwd=tmp_path, max_turns=7).build_options()
     assert options.max_turns == 7
 
 
@@ -59,14 +62,14 @@ def _result_message(**overrides: Any) -> ResultMessage:
 
 @pytest.mark.unit
 def test_run_task_returns_outcome(
-    settings: DeepgentSettings, monkeypatch: pytest.MonkeyPatch
+    settings: DeepgentSettings, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     async def fake_query(**_: Any) -> AsyncIterator[Any]:
         yield AssistantMessage(content=[TextBlock(text="working")], model="m")
         yield _result_message()
 
     monkeypatch.setattr(orchestrator_module, "_run_query", fake_query)
-    outcome = _run(Orchestrator(settings=settings, cwd=REPO_ROOT), "build it")
+    outcome = _run(Orchestrator(settings=settings, cwd=tmp_path), "build it")
     assert outcome.result == "done: artifact built"
     assert outcome.is_error is False
     assert outcome.num_turns == 3
@@ -76,7 +79,7 @@ def test_run_task_returns_outcome(
 
 @pytest.mark.unit
 def test_run_task_feeds_budget_tracker(
-    settings: DeepgentSettings, monkeypatch: pytest.MonkeyPatch
+    settings: DeepgentSettings, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     from deepgent.core.budget import BudgetTracker
 
@@ -97,21 +100,21 @@ def test_run_task_feeds_budget_tracker(
 
     monkeypatch.setattr(orchestrator_module, "_run_query", fake_query)
     monkeypatch.setattr(BudgetTracker, "record_usage", spy)
-    _run(Orchestrator(settings=settings, cwd=REPO_ROOT), "build it")
+    _run(Orchestrator(settings=settings, cwd=tmp_path), "build it")
     assert trackers, "orchestrator never fed the budget tracker"
     assert trackers[0].spent_usd == pytest.approx(settings.pricing.sonnet.output)
 
 
 @pytest.mark.unit
 def test_run_task_without_result_raises(
-    settings: DeepgentSettings, monkeypatch: pytest.MonkeyPatch
+    settings: DeepgentSettings, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     async def fake_query(**_: Any) -> AsyncIterator[Any]:
         yield AssistantMessage(content=[TextBlock(text="interrupted")], model="m")
 
     monkeypatch.setattr(orchestrator_module, "_run_query", fake_query)
     with pytest.raises(TaskExecutionError, match="without a result"):
-        _run(Orchestrator(settings=settings, cwd=REPO_ROOT), "build it")
+        _run(Orchestrator(settings=settings, cwd=tmp_path), "build it")
 
 
 def _run(orchestrator: Orchestrator, task: str) -> Any:
