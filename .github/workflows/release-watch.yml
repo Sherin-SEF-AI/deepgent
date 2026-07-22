@@ -1,0 +1,61 @@
+name: release-watch
+
+# Weekly check of upstream release feeds against versions.toml (section 13).
+# Findings open an issue; a human lands the bump so the container rebuild and
+# full golden suite gate it.
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+
+      - name: Sync dependencies
+        run: uv sync
+
+      - name: Check upstream releases
+        id: check
+        run: |
+          set +e
+          output=$(uv run deepgent versions-check 2>&1)
+          code=$?
+          echo "$output"
+          {
+            echo "findings<<EOF"
+            echo "$output"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+          if [ "$code" -eq 3 ]; then
+            echo "outdated=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          exit "$code"
+
+      - name: Open issue for outdated pins
+        if: steps.check.outputs.outdated == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FINDINGS: ${{ steps.check.outputs.findings }}
+        run: |
+          title="release-watch: versions.toml pins are behind upstream"
+          existing=$(gh issue list --state open --search "$title in:title" --json number --jq length)
+          if [ "$existing" = "0" ]; then
+            gh issue create --title "$title" --body "$FINDINGS
+
+          Per CLAUDE.md section 13: bump versions.toml, rebuild containers, and run the full golden suite before merge."
+          else
+            echo "issue already open; skipping"
+          fi

@@ -5,6 +5,7 @@ import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import structlog
 
@@ -16,6 +17,7 @@ _logger = structlog.get_logger(__name__)
 
 GOLDEN_DIR_NAME = "golden"
 RUNS_RELPATH = Path(".deepgent") / "runs"
+BASELINES_FILE = "baselines.json"
 
 GoldenImpl = Callable[[GoldenTask, Path], Awaitable[dict[str, float]]]
 
@@ -83,3 +85,50 @@ async def run_golden(task_id: str, project_root: Path) -> GoldenRunResult:
     )
     log.info("golden_finished", passed=result.passed)
     return result
+
+
+def baselines_path(project_root: Path) -> Path:
+    return project_root / GOLDEN_DIR_NAME / BASELINES_FILE
+
+
+def load_baselines(project_root: Path) -> dict[str, Any]:
+    path = baselines_path(project_root)
+    if not path.is_file():
+        return {}
+    data: dict[str, Any] = json.loads(path.read_text())
+    return data
+
+
+def update_baseline(result: GoldenRunResult, project_root: Path) -> None:
+    """Record this run as the golden's regression baseline."""
+    baselines = load_baselines(project_root)
+    baselines[result.task.id] = {
+        "passed": result.passed,
+        "metrics": result.metrics,
+    }
+    baselines_path(project_root).write_text(json.dumps(baselines, indent=2, sort_keys=True))
+
+
+def diff_against_baseline(result: GoldenRunResult, project_root: Path) -> list[str]:
+    """Regression findings vs the stored baseline (docs/evals.md gate).
+
+    A previously passing golden that now fails is always a regression; a
+    passing run whose cost-like metrics (wall_s, loop-count style) degrade
+    more than 15% is flagged for justification.
+    """
+    baselines = load_baselines(project_root)
+    baseline = baselines.get(result.task.id)
+    if baseline is None:
+        return [f"no baseline recorded for {result.task.id}; run with --update-baseline"]
+    findings: list[str] = []
+    if baseline["passed"] and not result.passed:
+        findings.append(f"regression: {result.task.id} previously passed and now fails")
+    for metric in ("wall_s", "loop_count"):
+        before = baseline["metrics"].get(metric)
+        after = result.metrics.get(metric)
+        if before and after and before > 0 and (after - before) / before > 0.15:
+            findings.append(
+                f"regression: {metric} degraded {((after - before) / before):.0%} "
+                f"({before:g} -> {after:g}) without a justification label"
+            )
+    return findings

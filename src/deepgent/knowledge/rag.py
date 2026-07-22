@@ -90,6 +90,15 @@ class RagClient:
         )
         return result
 
+    async def query_claim(self, stack: dict[str, str]) -> dict[str, Any]:
+        result: dict[str, Any] = await self._request("POST", "/matrix/query", json={"stack": stack})
+        return result
+
+    async def search_symptom(self, text: str, hw: str | None = None) -> list[dict[str, Any]]:
+        payload = await self._request("POST", "/corpus/search", json={"text": text, "hw": hw})
+        tuples: list[dict[str, Any]] = payload.get("tuples", [])
+        return tuples
+
 
 def build_rag_client(settings: DeepgentSettings) -> RagClient:
     """Build a client from settings; raises when unconfigured."""
@@ -149,7 +158,41 @@ def build_knowledge_tools(client: RagClient) -> list[SdkMcpTool[Any]]:
             return _err(str(exc))
         return _ok(chunk)
 
-    return [search, get_chunk]
+    @tool(
+        "query_claim",
+        "Query the compatibility matrix for a verified claim about a stack "
+        "(keys like l4t, cuda, trt, ds, ros, sensor, serdes). Status is "
+        "verified_pass, verified_fail, or unknown; claims carry an "
+        "evidence_run_id and verified_at, never model opinion.",
+        {"stack": dict},
+    )
+    async def query_claim(args: dict[str, Any]) -> dict[str, Any]:
+        stack = args.get("stack")
+        if not isinstance(stack, dict) or not stack:
+            return _err("stack must be a non-empty mapping of component to version")
+        try:
+            result = await client.query_claim({str(k): str(v) for k, v in stack.items()})
+        except KnowledgeError as exc:
+            return _err(str(exc))
+        return _ok(result)
+
+    @tool(
+        "search_symptom",
+        "Search the failure corpus for previously resolved failures matching "
+        "a symptom; results carry root_cause, fix, and verification_run_id.",
+        {"text": str, "hw": str},
+    )
+    async def search_symptom(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            tuples = await client.search_symptom(
+                str(args["text"]),
+                hw=str(args["hw"]) if args.get("hw") else None,
+            )
+        except KnowledgeError as exc:
+            return _err(str(exc))
+        return _ok({"tuples": tuples, "unknown": len(tuples) == 0})
+
+    return [search, get_chunk, query_claim, search_symptom]
 
 
 def build_knowledge_server(settings: DeepgentSettings) -> McpSdkServerConfig | None:

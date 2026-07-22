@@ -270,9 +270,18 @@ def boards_remove(
 @evals_app.command("run")
 def evals_run(
     task: str = typer.Option(..., "--task", help="Golden task id, e.g. gt-0001."),
+    diff: bool = typer.Option(
+        False, "--diff", help="Compare against the recorded baseline (regression gate)."
+    ),
+    update_baseline: bool = typer.Option(
+        False, "--update-baseline", help="Record this run as the new baseline."
+    ),
     debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
 ) -> None:
     """Run one golden task and score it mechanically."""
+    from deepgent.evals.runner import diff_against_baseline
+    from deepgent.evals.runner import update_baseline as save_baseline
+
     _configure_logging(debug)
     try:
         result = asyncio.run(run_golden(task, Path.cwd()))
@@ -283,11 +292,41 @@ def evals_run(
         color = typer.colors.GREEN if criterion.passed else typer.colors.RED
         typer.secho(criterion.describe(), fg=color)
     typer.echo(f"artifacts: {result.run_dir}")
-    if result.passed:
-        typer.secho(f"{task} PASSED", fg=typer.colors.GREEN)
+    failed = not result.passed
+    if diff:
+        findings = diff_against_baseline(result, Path.cwd())
+        for finding in findings:
+            typer.secho(finding, fg=typer.colors.RED)
+            failed = True
+    if update_baseline:
+        save_baseline(result, Path.cwd())
+        typer.echo(f"baseline updated for {task}")
+    if failed:
+        typer.secho(f"{task} FAILED", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+    typer.secho(f"{task} PASSED", fg=typer.colors.GREEN)
+
+
+@app.command("versions-check", hidden=True)
+def versions_check(
+    debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
+) -> None:
+    """Check upstream release feeds against versions.toml (release watch)."""
+    from deepgent.containers import load_jp6_spec
+    from deepgent.knowledge.release_watch import check_releases
+
+    _configure_logging(debug)
+    try:
+        findings = check_releases(load_jp6_spec().l4t_container)
+    except DeepgentError as exc:
+        _fail(str(exc), debug=debug, exc=exc)
         return
-    typer.secho(f"{task} FAILED", fg=typer.colors.RED)
-    raise typer.Exit(code=1)
+    if not findings:
+        typer.secho("versions.toml is current with upstream", fg=typer.colors.GREEN)
+        return
+    for finding in findings:
+        typer.echo(finding.describe())
+    raise typer.Exit(code=3)
 
 
 @rag_app.command("ingest")
