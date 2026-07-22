@@ -25,6 +25,7 @@ from deepgent.boards.runner import BoardRunner, CommandResult, watchdog_command
 from deepgent.boards.tegrastats import (
     TegrastatsCapture,
     TegrastatsSample,
+    energy_per_item,
     parse_capture,
     parse_line,
 )
@@ -42,6 +43,7 @@ __all__ = [
     "build_board_farm_server",
     "build_board_farm_tools",
     "current_lease",
+    "energy_per_item",
     "get_board",
     "load_registry",
     "new_holder_id",

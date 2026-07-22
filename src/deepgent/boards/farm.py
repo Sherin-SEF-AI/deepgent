@@ -160,7 +160,12 @@ def build_board_farm_tools(holder: str | None = None) -> list[SdkMcpTool[Any]]:
         except DeepgentError as exc:
             return _err(str(exc))
         capture = parse_capture(raw)
-        return _ok({"metrics": capture.summary_metrics(), "raw_lines": len(raw.splitlines())})
+        return _ok(
+            {
+                "metrics": capture.summary_metrics(interval_ms=500),
+                "raw_lines": len(raw.splitlines()),
+            }
+        )
 
     @tool(
         "power",

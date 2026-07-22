@@ -307,6 +307,34 @@ def evals_run(
     typer.secho(f"{task} PASSED", fg=typer.colors.GREEN)
 
 
+@app.command("soak")
+def soak_run(
+    board: str = typer.Option(..., "--board", help="Registered board id."),
+    hours: float = typer.Option(..., "--hours", min=0.01, help="Planned soak duration."),
+    workload: str | None = typer.Option(
+        None, "--workload", help="Remote workload command; omit for pure observation."
+    ),
+    tj_max: float = typer.Option(95.0, "--tj-max", help="Thermal anomaly ceiling in C."),
+    debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
+) -> None:
+    """Endurance run with anomaly snapshots and a survival report (Tier 1)."""
+    from deepgent.evals import create_run_dir
+    from deepgent.evals.soak import AnomalyRules, SoakRunner, default_phases
+
+    _configure_logging(debug)
+    try:
+        run_dir = create_run_dir(f"soak-{board}", Path.cwd())
+        runner = SoakRunner(board, run_dir, rules=AnomalyRules(tj_max_c=tj_max))
+        phases = default_phases(hours * 3600.0, workload)
+        result = asyncio.run(runner.run(phases))
+    except DeepgentError as exc:
+        _fail(str(exc), debug=debug, exc=exc)
+        return
+    typer.echo(result.render_report())
+    typer.echo(f"artifacts: {run_dir}")
+    raise typer.Exit(code=0 if result.survived else 1)
+
+
 @app.command("ci")
 def ci_run(
     task: str = typer.Option(..., "--task", help="Task to run non-interactively."),

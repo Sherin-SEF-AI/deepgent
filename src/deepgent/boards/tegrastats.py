@@ -17,6 +17,9 @@ _GR3D = re.compile(r"\bGR3D_FREQ (\d+)%")
 _CPU = re.compile(r"\bCPU \[([^\]]+)\]")
 _CPU_CORE = re.compile(r"^(\d+)%@\d+$")
 _TEMP = re.compile(r"\b([a-zA-Z][a-zA-Z0-9_]*)@([\d.]+)C\b")
+# Power rails print "<RAIL> <inst>mW/<avg>mW" (r36 TegrastatsUtility docs);
+# instantaneous first, average-since-start second.
+_RAIL = re.compile(r"\b(V[A-Z0-9_]+)\s+(\d+)mW/(\d+)mW\b")
 
 
 @dataclass(frozen=True)
@@ -28,6 +31,14 @@ class TegrastatsSample:
     gr3d_pct: int | None
     cpu_pcts: tuple[int | None, ...]
     temps_c: dict[str, float] = field(default_factory=dict)
+    rails_mw: dict[str, tuple[int, int]] = field(default_factory=dict)
+
+    @property
+    def total_power_mw(self) -> int | None:
+        """Sum of instantaneous rail power, when any rails were reported."""
+        if not self.rails_mw:
+            return None
+        return sum(inst for inst, _avg in self.rails_mw.values())
 
 
 def parse_line(line: str) -> TegrastatsSample | None:
@@ -49,12 +60,14 @@ def parse_line(line: str) -> TegrastatsSample | None:
         cpu_pcts = tuple(cores)
 
     temps = {name: float(value) for name, value in _TEMP.findall(line)}
+    rails = {name: (int(inst), int(avg)) for name, inst, avg in _RAIL.findall(line)}
     return TegrastatsSample(
         ram_used_mb=int(ram.group(1)),
         ram_total_mb=int(ram.group(2)),
         gr3d_pct=gr3d,
         cpu_pcts=cpu_pcts,
         temps_c=temps,
+        rails_mw=rails,
     )
 
 
@@ -65,8 +78,12 @@ class TegrastatsCapture:
     samples: tuple[TegrastatsSample, ...]
     skipped_lines: int
 
-    def summary_metrics(self) -> dict[str, float]:
-        """Mechanical summary metrics for golden scoring."""
+    def summary_metrics(self, interval_ms: int | None = None) -> dict[str, float]:
+        """Mechanical summary metrics for golden scoring.
+
+        With the capture interval, rail power integrates into energy_j via
+        a left Riemann sum over instantaneous rail totals.
+        """
         metrics: dict[str, float] = {
             "tegrastats_samples": float(len(self.samples)),
             "tegrastats_skipped_lines": float(self.skipped_lines),
@@ -80,7 +97,21 @@ class TegrastatsCapture:
             temps = [s.temps_c["tj"] for s in self.samples if "tj" in s.temps_c]
             if temps:
                 metrics["tj_max_c"] = max(temps)
+            powers = [s.total_power_mw for s in self.samples if s.total_power_mw is not None]
+            if powers:
+                metrics["power_mean_w"] = float(mean(powers)) / 1000.0
+                metrics["power_max_w"] = float(max(powers)) / 1000.0
+                if interval_ms is not None:
+                    metrics["energy_j"] = sum(powers) / 1000.0 * (interval_ms / 1000.0)
         return metrics
+
+
+def energy_per_item(metrics: dict[str, float], items: int) -> float | None:
+    """Joules per inference/iteration from captured energy, or None."""
+    energy = metrics.get("energy_j")
+    if energy is None or items <= 0:
+        return None
+    return energy / items
 
 
 def parse_capture(text: str) -> TegrastatsCapture:

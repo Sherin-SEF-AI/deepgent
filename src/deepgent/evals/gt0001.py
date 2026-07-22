@@ -72,6 +72,6 @@ async def run_gt_0001(task: GoldenTask, run_dir: Path) -> dict[str, float]:
         "kernel_ok": 1.0 if _KERNEL_OK_MARKER in kernel_result.stdout else 0.0,
         "wall_s": wall_s,
     }
-    metrics.update(capture.summary_metrics())
+    metrics.update(capture.summary_metrics(interval_ms=_TEGRASTATS_INTERVAL_MS))
     log.info("gt0001_metrics", **metrics)
     return metrics

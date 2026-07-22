@@ -148,3 +148,39 @@ class TestTegrastatsParser:
     def test_empty_capture(self) -> None:
         capture = parse_capture("")
         assert capture.summary_metrics()["tegrastats_samples"] == 0.0
+
+
+class TestPowerProfiling:
+    @pytest.mark.unit
+    def test_rails_parsed(self) -> None:
+        sample = parse_line(_LINE_FULL)
+        assert sample is not None
+        assert sample.rails_mw["VDD_GPU_SOC"] == (3175, 3175)
+        assert sample.rails_mw["VDD_CPU_CV"] == (794, 794)
+        assert sample.total_power_mw == 3175 + 794
+
+    @pytest.mark.unit
+    def test_no_rails_means_no_power(self) -> None:
+        sample = parse_line(_LINE_MINIMAL)
+        assert sample is not None
+        assert sample.rails_mw == {}
+        assert sample.total_power_mw is None
+
+    @pytest.mark.unit
+    def test_energy_integration(self) -> None:
+        from deepgent.boards import energy_per_item
+
+        # Two samples at 500ms interval: (3969 + 3969) mW * 0.5s = 3.969 J
+        capture = parse_capture("\n".join([_LINE_FULL, _LINE_FULL]))
+        metrics = capture.summary_metrics(interval_ms=500)
+        assert metrics["power_mean_w"] == pytest.approx(3.969)
+        assert metrics["power_max_w"] == pytest.approx(3.969)
+        assert metrics["energy_j"] == pytest.approx(3.969)
+        assert energy_per_item(metrics, 1000) == pytest.approx(0.003969)
+        assert energy_per_item(metrics, 0) is None
+
+    @pytest.mark.unit
+    def test_no_interval_means_no_energy(self) -> None:
+        metrics = parse_capture(_LINE_FULL).summary_metrics()
+        assert "power_mean_w" in metrics
+        assert "energy_j" not in metrics
