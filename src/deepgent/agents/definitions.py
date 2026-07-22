@@ -62,9 +62,15 @@ fabricating a hardware fact is never acceptable.
 
 def build_agent_definitions(
     settings: DeepgentSettings,
+    skill_names: list[str] | None = None,
 ) -> dict[str, AgentDefinition]:
-    """Return the five subagent definitions, models resolved per tier."""
+    """Return the five subagent definitions, models resolved per tier.
+
+    skill_names preload into the planning and implementation agents; the
+    other agents can still invoke skills through the Skill tool.
+    """
     tiers = settings.models
+    skills = skill_names or None
     return {
         "architect": AgentDefinition(
             description=(
@@ -74,12 +80,14 @@ def build_agent_definitions(
             prompt=_ARCHITECT_PROMPT,
             tools=["Read", "Glob", "Grep", KNOWLEDGE_MCP],
             model=tiers.opus,
+            skills=skills,
         ),
         "implementer": AgentDefinition(
             description="Writes code and runs deterministic generators.",
             prompt=_IMPLEMENTER_PROMPT,
             tools=["Read", "Write", "Edit", "Bash", GENERATORS_MCP],
             model=tiers.sonnet,
+            skills=skills,
         ),
         "verifier": AgentDefinition(
             description="Builds in pinned containers, runs static analysis and tests.",

@@ -117,6 +117,14 @@ class TestTegrastatsParser:
         assert sample.temps_c == {}
 
     @pytest.mark.unit
+    def test_jp6_dual_gpc_gr3d_format(self) -> None:
+        # JP6 consolidates GPU load into one entry with per-GPC frequencies:
+        # GR3D_FREQ X%@[F1,F2] (r36 TegrastatsUtility docs).
+        sample = parse_line("RAM 2048/30536MB CPU [3%@729,off] GR3D_FREQ 57%@[1300,1297]")
+        assert sample is not None
+        assert sample.gr3d_pct == 57
+
+    @pytest.mark.unit
     @pytest.mark.parametrize(
         "line",
         ["", "not tegrastats output", "error: tegrastats requires root"],

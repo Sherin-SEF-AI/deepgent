@@ -37,6 +37,7 @@ from deepgent.containers.build import BINFMT_FLAG
 from deepgent.core import Orchestrator
 from deepgent.errors import DeepgentError
 from deepgent.evals import run_golden
+from deepgent.knowledge import default_skills_dir, list_skills
 
 
 class DeepgentGroup(TyperGroup):
@@ -62,6 +63,8 @@ boards_app = typer.Typer(help="Manage the target board registry.")
 app.add_typer(boards_app, name="boards")
 evals_app = typer.Typer(help="Run golden tasks and score them mechanically.")
 app.add_typer(evals_app, name="evals")
+skills_app = typer.Typer(help="Inspect local skill packs.")
+app.add_typer(skills_app, name="skills")
 
 _PROJECT_MD = """\
 # deepgent project state
@@ -282,6 +285,27 @@ def evals_run(
         return
     typer.secho(f"{task} FAILED", fg=typer.colors.RED)
     raise typer.Exit(code=1)
+
+
+@skills_app.command("list")
+def skills_list(
+    debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
+) -> None:
+    """List locally available skill packs."""
+    try:
+        packs = list_skills()
+    except DeepgentError as exc:
+        _fail(str(exc), debug=debug, exc=exc)
+        return
+    if not packs:
+        source = default_skills_dir()
+        typer.echo(
+            "no skill packs found"
+            + (f" in {source}" if source else " (no local skills source resolved)")
+        )
+        return
+    for pack in packs:
+        typer.echo(f"{pack.name}  {pack.description}")
 
 
 @app.command()

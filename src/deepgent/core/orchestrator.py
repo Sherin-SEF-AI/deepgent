@@ -63,19 +63,24 @@ class Orchestrator:
         # Deferred import: hooks depend on core.budget, so a module-level
         # import here would make deepgent.hooks unimportable on its own.
         from deepgent.hooks import build_hooks
+        from deepgent.knowledge import sync_skills
 
         if tracker is None:
             tracker = BudgetTracker(self._settings)
+        # Context assembly (lifecycle step 2): resolve skill packs into the
+        # session project so the harness discovers them via setting_sources.
+        skill_names = sync_skills(self._cwd)
         return ClaudeAgentOptions(
             allowed_tools=list(MAIN_SESSION_TOOLS),
             disallowed_tools=[],
             permission_mode=self._settings.permission_mode,
             mcp_servers={},
-            agents=build_agent_definitions(self._settings),
+            agents=build_agent_definitions(self._settings, skill_names),
             hooks=build_hooks(self._settings, tracker),
             setting_sources=["project"],
             cwd=self._cwd,
             max_turns=self._max_turns,
+            skills=skill_names or None,
             # Deterministic intake routing (section 9) arrives with the
             # classifier; until then every task runs on the sonnet tier.
             model=self._settings.models.sonnet,
