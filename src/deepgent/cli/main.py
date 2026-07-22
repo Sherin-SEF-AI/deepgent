@@ -658,6 +658,41 @@ def rag_upgrade_check(
     raise typer.Exit(code=0 if report.safe else 1)
 
 
+@app.command("scaffold-driver")
+def scaffold_driver_cmd(
+    device: str = typer.Argument(..., help="Device name, e.g. 'IMX219 Camera'."),
+    compatible: str = typer.Option(..., "--compatible", help="DT compatible string."),
+    chip: str = typer.Option(..., "--chip", help="Chip to search datasheet-rag for."),
+    kind: str = typer.Option("i2c", "--kind", help="i2c or v4l2."),
+    debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
+) -> None:
+    """Scaffold a RAG-grounded driver skeleton + DT fragment (Tier 3)."""
+    from deepgent.generators import scaffold_driver, spec_from_chunks
+
+    _configure_logging(debug)
+    try:
+        settings = load_settings()
+        client = build_rag_client(settings)
+
+        async def _chunks() -> Any:
+            try:
+                return await client.search(f"{device} registers i2c address", chip=chip)
+            finally:
+                await client.aclose()
+
+        chunks = asyncio.run(_chunks())
+    except DeepgentError as exc:
+        _fail(str(exc), debug=debug, exc=exc)
+        return
+    spec = spec_from_chunks(device, compatible, kind, chunks)
+    output = scaffold_driver(spec)
+    written = output.write(Path.cwd())
+    for path in written:
+        typer.echo(f"wrote {path}")
+    for todo in output.todos:
+        typer.secho(f"TODO: {todo}", fg=typer.colors.YELLOW)
+
+
 @app.command("errata-scan")
 def errata_scan_cmd(
     chips: str = typer.Option(..., "--chips", help="Comma-separated BOM chip ids."),

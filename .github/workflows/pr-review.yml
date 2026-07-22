@@ -1,0 +1,42 @@
+name: pr-review
+
+# Hardware-verified PR review (Tier 3). Runs the golden suite on the
+# self-hosted board runner for the PR's head, then posts a review comment
+# where every number is measured on target. Manual dispatch until the board
+# farm is attached; convert to pull_request trigger once a runner is online.
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: Golden task id to verify
+        required: true
+        default: gt-0001
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  hardware-review:
+    runs-on: [self-hosted, deepgent-hw]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+
+      - name: Sync dependencies
+        run: uv sync --all-groups
+
+      - name: Run golden and render review
+        id: review
+        run: |
+          uv run deepgent evals run --task "${{ github.event.inputs.task }}" --diff | tee review-body.md || true
+
+      - name: Post review comment
+        if: github.event.pull_request.number != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh pr comment "${{ github.event.pull_request.number }}" --body-file review-body.md
