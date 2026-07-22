@@ -307,6 +307,123 @@ def evals_run(
     typer.secho(f"{task} PASSED", fg=typer.colors.GREEN)
 
 
+@app.command("bisect")
+def bisect_cmd(
+    task: str = typer.Option(..., "--task", help="Golden task id to use as the predicate."),
+    good: str = typer.Option(..., "--good", help="Known-good git ref."),
+    bad: str = typer.Option(..., "--bad", help="Known-bad git ref."),
+    debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
+) -> None:
+    """Auto-bisect a regressed golden across commits to the breaking change (Tier 1)."""
+    import subprocess
+
+    from deepgent.evals import run_golden
+    from deepgent.evals.bisect import bisect as run_bisect
+
+    _configure_logging(debug)
+    try:
+        revs = subprocess.run(
+            ["git", "rev-list", "--reverse", f"{good}..{bad}"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.split()
+    except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+        _fail(f"cannot list commits {good}..{bad}: {exc}", debug=debug)
+        return
+    candidates = [good, *revs]
+    if candidates[-1] != bad:
+        candidates.append(bad)
+    if len(candidates) < 2:
+        _fail(f"no commits between {good} and {bad}", debug=debug)
+
+    async def predicate(rev: str) -> bool:
+        subprocess.run(["git", "checkout", "--quiet", rev], check=True)
+        result = await run_golden(task, Path.cwd())
+        return result.passed
+
+    original = subprocess.run(
+        ["git", "rev-parse", "--abbrev-ref", "HEAD"], capture_output=True, text=True
+    ).stdout.strip()
+    try:
+        result = asyncio.run(run_bisect(candidates, predicate))
+    except DeepgentError as exc:
+        _fail(str(exc), debug=debug, exc=exc)
+        return
+    finally:
+        if original and original != "HEAD":
+            subprocess.run(["git", "checkout", "--quiet", original], check=False)
+    typer.echo(result.render_report())
+    if result.first_bad:
+        typer.secho(f"breaking change: {result.first_bad}", fg=typer.colors.RED)
+
+
+@app.command("replay")
+def replay_cmd(
+    action: str = typer.Argument(..., help="record | replay | list"),
+    name: str = typer.Option("", "--name", help="Fixture name."),
+    board: str = typer.Option("", "--board", help="Registered board id."),
+    command: str = typer.Option("", "--command", help="Record or replay command."),
+    remote_path: str = typer.Option("", "--remote-path", help="Board-side stream path."),
+    debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
+) -> None:
+    """Record real sensor streams as fixtures and replay them (Tier 1)."""
+    from deepgent.evals.replay import ReplayRecorder, list_fixtures
+
+    _configure_logging(debug)
+    if action == "list":
+        for manifest in list_fixtures(Path.cwd()):
+            typer.echo(
+                f"{manifest.name}  {manifest.board}  {manifest.sha256[:12]}  {manifest.size_bytes}B"
+            )
+        return
+    if action not in {"record", "replay"}:
+        _fail(f"unknown replay action '{action}'; use record, replay, or list", debug=debug)
+    if not (name and board and command and remote_path):
+        _fail("record/replay need --name, --board, --command, and --remote-path", debug=debug)
+    try:
+        recorder = ReplayRecorder(board, Path.cwd())
+        if action == "record":
+            manifest = asyncio.run(recorder.record(name, command, remote_path))
+            typer.secho(
+                f"recorded {name} ({manifest.sha256[:12]}, {manifest.size_bytes}B)",
+                fg=typer.colors.GREEN,
+            )
+        else:
+            exit_status, output = asyncio.run(recorder.replay(name, command, remote_path))
+            typer.echo(output)
+            raise typer.Exit(code=1 if exit_status != 0 else 0)
+    except DeepgentError as exc:
+        _fail(str(exc), debug=debug, exc=exc)
+
+
+@app.command("differential")
+def differential_cmd(
+    artifact: Path = typer.Argument(..., help="Local artifact to run on each board."),
+    boards: str = typer.Option(..., "--boards", help="Comma-separated board ids."),
+    command: str = typer.Option(
+        ..., "--command", help="Command to run the artifact on each board."
+    ),
+    debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
+) -> None:
+    """Run one artifact across boards and compare latency/power/energy (Tier 3)."""
+    from deepgent.evals import create_run_dir
+    from deepgent.evals.differential import DifferentialRunner
+
+    _configure_logging(debug)
+    board_ids = [b.strip() for b in boards.split(",") if b.strip()]
+    try:
+        runner = DifferentialRunner(Path.cwd())
+        result = asyncio.run(runner.run(artifact, board_ids, command))
+        run_dir = create_run_dir("differential", Path.cwd())
+        runner.persist(result, run_dir)
+    except DeepgentError as exc:
+        _fail(str(exc), debug=debug, exc=exc)
+        return
+    typer.echo(result.render_table())
+    typer.echo(f"artifacts: {run_dir}")
+
+
 @app.command("soak")
 def soak_run(
     board: str = typer.Option(..., "--board", help="Registered board id."),

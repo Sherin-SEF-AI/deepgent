@@ -1,0 +1,173 @@
+"""deepgent differential: run one artifact across multiple boards, compare.
+
+Deploys the same local artifact to each named board, runs it, captures
+tegrastats, and renders a comparison table of latency, power, energy, and
+declared cost so hardware selection becomes evidence rather than opinion.
+
+Each board's run is independent (its own lease is taken by the board-farm
+path in production); here the runner is invoked directly and the comparison
+is pure post-processing over the per-board metrics.
+"""
+
+import asyncio
+import json
+import re
+import time
+from dataclasses import dataclass, field
+from pathlib import Path
+
+import structlog
+
+from deepgent.boards import BoardConfig, BoardRunner, get_board, parse_capture
+from deepgent.errors import BoardError
+
+_logger = structlog.get_logger(__name__)
+
+_CAPTURE_INTERVAL_MS = 500
+_LATENCY = re.compile(r"(?i)\b(?:latency|p99|mean)\D*([\d.]+)\s*ms")
+
+
+@dataclass(frozen=True)
+class BoardRun:
+    """One board's differential result."""
+
+    board: str
+    exit_status: int
+    latency_ms: float | None
+    metrics: dict[str, float]
+    cost_usd: float | None = None
+
+    @property
+    def ok(self) -> bool:
+        return self.exit_status == 0
+
+
+@dataclass
+class DifferentialResult:
+    """All boards' runs plus the rendered comparison."""
+
+    artifact: str
+    runs: list[BoardRun] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "artifact": self.artifact,
+            "runs": [
+                {
+                    "board": run.board,
+                    "exit_status": run.exit_status,
+                    "latency_ms": run.latency_ms,
+                    "power_mean_w": run.metrics.get("power_mean_w"),
+                    "energy_j": run.metrics.get("energy_j"),
+                    "tj_max_c": run.metrics.get("tj_max_c"),
+                    "cost_usd": run.cost_usd,
+                }
+                for run in self.runs
+            ],
+        }
+
+    def render_table(self) -> str:
+        header = (
+            f"{'board':<14} {'exit':>4} {'latency_ms':>11} {'power_w':>8} "
+            f"{'energy_j':>9} {'tj_c':>6} {'cost_usd':>9}"
+        )
+        rows = [header, "-" * len(header)]
+        for run in self.runs:
+            rows.append(
+                f"{run.board:<14} {run.exit_status:>4} "
+                f"{_fmt(run.latency_ms):>11} "
+                f"{_fmt(run.metrics.get('power_mean_w')):>8} "
+                f"{_fmt(run.metrics.get('energy_j')):>9} "
+                f"{_fmt(run.metrics.get('tj_max_c')):>6} "
+                f"{_fmt(run.cost_usd):>9}"
+            )
+        return "\n".join(rows) + "\n"
+
+
+def _fmt(value: float | None) -> str:
+    return "-" if value is None else f"{value:.2f}"
+
+
+def parse_latency_ms(output: str) -> float | None:
+    """Best-effort latency extraction from workload stdout."""
+    match = _LATENCY.search(output)
+    return float(match.group(1)) if match else None
+
+
+async def _run_one_board(
+    board: BoardConfig,
+    local_artifact: Path,
+    remote_path: str,
+    run_command: str,
+    capture_s: float,
+    cost_usd: float | None,
+) -> BoardRun:
+    async with BoardRunner(board) as runner:
+        await runner.run(f"mkdir -p {Path(remote_path).parent}", timeout_s=30)
+        await runner.put(local_artifact, remote_path)
+        await runner.run(f"chmod +x {remote_path}", timeout_s=30)
+
+        async def workload() -> tuple[int, str]:
+            result = await runner.run(run_command, timeout_s=capture_s)
+            return result.exit_status, result.stdout + result.stderr
+
+        capture_task = asyncio.create_task(
+            runner.capture_tegrastats(capture_s, _CAPTURE_INTERVAL_MS)
+        )
+        exit_status, output = await workload()
+        raw = await capture_task
+        await runner.run(f"rm -f {remote_path}", timeout_s=30)
+
+    metrics = parse_capture(raw).summary_metrics(interval_ms=_CAPTURE_INTERVAL_MS)
+    return BoardRun(
+        board=board.id,
+        exit_status=exit_status,
+        latency_ms=parse_latency_ms(output),
+        metrics=metrics,
+        cost_usd=cost_usd,
+    )
+
+
+class DifferentialRunner:
+    """Runs one artifact across several boards and compares."""
+
+    def __init__(self, project_root: Path) -> None:
+        self._project_root = project_root
+
+    async def run(
+        self,
+        local_artifact: Path,
+        board_ids: list[str],
+        run_command: str,
+        remote_path: str = "/tmp/deepgent-diff/artifact",
+        capture_s: float = 30.0,
+        costs: dict[str, float] | None = None,
+    ) -> DifferentialResult:
+        if not local_artifact.is_file():
+            raise BoardError(f"artifact {local_artifact} does not exist")
+        costs = costs or {}
+        result = DifferentialResult(artifact=local_artifact.name)
+        # Boards run sequentially: each holds its own board a while and the
+        # comparison does not benefit from contended concurrency.
+        for board_id in board_ids:
+            board = get_board(board_id)
+            _logger.info("differential_board", board=board_id)
+            run = await _run_one_board(
+                board,
+                local_artifact,
+                remote_path,
+                run_command,
+                capture_s,
+                costs.get(board_id),
+            )
+            result.runs.append(run)
+        return result
+
+    def persist(self, result: DifferentialResult, run_dir: Path) -> None:
+        run_dir.mkdir(parents=True, exist_ok=True)
+        (run_dir / "differential.json").write_text(json.dumps(result.to_dict(), indent=2))
+        (run_dir / "comparison.txt").write_text(result.render_table())
+
+
+def stamp() -> float:
+    return time.time()
