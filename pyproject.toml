@@ -1,0 +1,45 @@
+[project]
+name = "deepgent"
+version = "0.1.1"
+description = "Domain-locked autonomous engineering agent for autonomous vehicles, computer vision, and embedded systems"
+readme = "README.md"
+authors = [{ name = "Sherin Joseph Roy" }]
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+requires-python = ">=3.12"
+dependencies = []
+
+[project.urls]
+Repository = "https://github.com/Sherin-SEF-AI/deepgent"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.14",
+    "mypy>=1.14",
+    "pytest>=8.3",
+]
+
+[build-system]
+requires = ["uv_build>=0.11,<0.12"]
+build-backend = "uv_build"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.mypy]
+strict = true
+files = ["src"]
+python_version = "3.12"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--strict-markers"
+markers = [
+    "unit: fast, isolated tests with no external dependencies",
+    "integration: tests that touch containers, networks, or external services",
+    "hardware: tests that require a leased target board; run only via the board runner workflow",
+]
