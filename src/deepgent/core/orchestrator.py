@@ -62,6 +62,7 @@ class Orchestrator:
         explicitly; nothing relies on ambient defaults."""
         # Deferred import: hooks depend on core.budget, so a module-level
         # import here would make deepgent.hooks unimportable on its own.
+        from deepgent.boards import build_board_farm_server
         from deepgent.hooks import build_hooks
         from deepgent.knowledge import sync_skills
 
@@ -74,7 +75,9 @@ class Orchestrator:
             allowed_tools=list(MAIN_SESSION_TOOLS),
             disallowed_tools=[],
             permission_mode=self._settings.permission_mode,
-            mcp_servers={},
+            # Only the hardware-runner subagent is granted these tools
+            # (section 8); safety_gate covers the destructive ones.
+            mcp_servers={"board_farm": build_board_farm_server()},
             agents=build_agent_definitions(self._settings, skill_names),
             hooks=build_hooks(self._settings, tracker),
             setting_sources=["project"],

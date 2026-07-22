@@ -26,7 +26,7 @@ def test_options_set_all_section_7_fields(settings: DeepgentSettings, tmp_path: 
     assert options.allowed_tools == orchestrator_module.MAIN_SESSION_TOOLS
     assert options.disallowed_tools == []
     assert options.permission_mode == settings.permission_mode
-    assert options.mcp_servers == {}
+    assert isinstance(options.mcp_servers, dict) and "board_farm" in options.mcp_servers
     assert options.agents is not None and len(options.agents) == 5
     assert options.hooks is not None
     assert set(options.hooks) == {"UserPromptSubmit", "PreToolUse", "PostToolUse"}
