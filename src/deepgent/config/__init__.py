@@ -8,6 +8,7 @@ from deepgent.config.settings import (
     TierPricing,
     find_versions_file,
     load_settings,
+    load_versions,
 )
 
 __all__ = [
@@ -18,4 +19,5 @@ __all__ = [
     "TierPricing",
     "find_versions_file",
     "load_settings",
+    "load_versions",
 ]

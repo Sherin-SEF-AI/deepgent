@@ -8,6 +8,11 @@ l4t = "36.4.3"
 cuda = "12.6"
 tensorrt = "10.3"
 cudnn = "9.3"
+l4t_container = "r36.4.0"  # nvcr.io/nvidia/l4t-jetpack tag; container tags are
+                           # coarser than L4T point releases (verified on nvcr.io
+                           # 2026-07-22)
+cuda_arch = "87"           # AGX Orin compute capability (sm_87), per NVIDIA's
+                           # CUDA GPU compatibility list
 
 [jetson.jp7]           # newer line; not used until a target requires it
 jetpack = "7.2"

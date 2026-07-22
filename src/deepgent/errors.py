@@ -11,3 +11,7 @@ class ConfigError(DeepgentError):
 
 class TaskExecutionError(DeepgentError):
     """A task run failed before producing a result."""
+
+
+class ContainerError(DeepgentError):
+    """A toolchain container could not be built or verified."""

@@ -8,6 +8,7 @@ import asyncio
 import importlib.metadata
 import logging
 import os
+import platform
 import shutil
 import sys
 from pathlib import Path
@@ -22,6 +23,8 @@ from typer.core import TyperGroup
 
 import deepgent
 from deepgent.config import load_settings
+from deepgent.containers import ContainerBuilder, load_jp6_spec
+from deepgent.containers.build import BINFMT_FLAG
 from deepgent.core import Orchestrator
 from deepgent.errors import DeepgentError
 
@@ -43,6 +46,8 @@ class DeepgentGroup(TyperGroup):
 
 
 app = typer.Typer(add_completion=False, cls=DeepgentGroup)
+containers_app = typer.Typer(help="Build and verify toolchain containers.")
+app.add_typer(containers_app, name="containers")
 
 _PROJECT_MD = """\
 # deepgent project state
@@ -125,6 +130,31 @@ def run_one_shot(
     raise typer.Exit(code=1 if outcome.is_error else 0)
 
 
+@containers_app.command("build")
+def containers_build(
+    target: str = typer.Argument("jp6", help="Container target to build."),
+    smoke: bool = typer.Option(
+        False, "--smoke", help="Run the CUDA compile smoke check after building."
+    ),
+    debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
+) -> None:
+    """Build a version-pinned toolchain container (linux/arm64 via qemu)."""
+    _configure_logging(debug)
+    if target != "jp6":
+        _fail(f"unknown container target '{target}'; available: jp6", debug=debug)
+    try:
+        builder = ContainerBuilder(load_jp6_spec())
+        builder.build()
+        if smoke:
+            builder.cuda_smoke()
+    except DeepgentError as exc:
+        _fail(str(exc), debug=debug, exc=exc)
+        return
+    typer.secho(f"built {builder.spec.image_tag}", fg=typer.colors.GREEN)
+    if smoke:
+        typer.secho("CUDA smoke check passed (aarch64 ELF)", fg=typer.colors.GREEN)
+
+
 @app.command()
 def init(
     directory: Path = typer.Argument(Path("."), help="Project directory to initialize."),
@@ -177,6 +207,25 @@ def doctor(
 
     uv_path = shutil.which("uv")
     report("uv", uv_path is not None, uv_path or "not on PATH; install from astral.sh/uv")
+
+    docker_path = shutil.which("docker")
+    report(
+        "docker",
+        docker_path is not None,
+        docker_path or "not on PATH; install Docker Engine (docs.docker.com/engine/install)",
+    )
+
+    native_arm = platform.machine() in ("aarch64", "arm64")
+    binfmt_ok = native_arm or BINFMT_FLAG.exists()
+    if native_arm:
+        binfmt_detail = "native arm64 host"
+    elif binfmt_ok:
+        binfmt_detail = str(BINFMT_FLAG)
+    else:
+        binfmt_detail = (
+            "not registered; run: docker run --privileged --rm tonistiigi/binfmt --install arm64"
+        )
+    report("qemu binfmt (arm64)", binfmt_ok, binfmt_detail)
 
     try:
         settings = load_settings()

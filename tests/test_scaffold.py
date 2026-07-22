@@ -38,7 +38,15 @@ def test_versions_manifest_is_complete() -> None:
         versions = tomllib.load(f)
 
     jp6 = versions["jetson"]["jp6"]
-    assert set(jp6) == {"jetpack", "l4t", "cuda", "tensorrt", "cudnn"}
+    assert set(jp6) == {
+        "jetpack",
+        "l4t",
+        "cuda",
+        "tensorrt",
+        "cudnn",
+        "l4t_container",
+        "cuda_arch",
+    }
 
     jp7 = versions["jetson"]["jp7"]
     assert set(jp7) == {"jetpack", "l4t", "cuda", "tensorrt"}

@@ -138,6 +138,11 @@ def _merged_file_config(project_root: Path | None) -> dict[str, Any]:
     return data
 
 
+def load_versions(project_root: Path | None = None) -> dict[str, Any]:
+    """Return the full parsed versions.toml manifest."""
+    return _read_toml(find_versions_file(project_root))
+
+
 def load_settings(project_root: Path | None = None) -> DeepgentSettings:
     """Build settings from versions.toml, config files, and environment."""
     data = _merged_file_config(project_root)
