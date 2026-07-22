@@ -249,46 +249,12 @@ law; prose elsewhere is guidance.
 
 ## 11. Skill packs
 
-[MIGRATE -> docs/skills.md after Phase 0]
-
-- Format: Agent Skills convention. Directory per skill with `SKILL.md`
-  (frontmatter: name, description; body: instructions), optional `references/`,
-  `scripts/`. Keep SKILL.md under ~150 lines; deep detail goes in references
-  loaded on demand.
-- Launch set (Phase 1 builds first three):
-  jetson-bringup, tensorrt-quantization, ros2-systems,
-  deepstream-pipelines, camera-bringup-gmsl2, can-bus, sensor-fusion,
-  training-pipelines, embedded-c-safety, hailo-toolchain.
-- Content rules: only non-obvious, durable, version-tagged knowledge. Nothing
-  the base model already knows (test by running goldens with the skill absent).
-  Every claim carries source + version applicability. No licensed standards text
-  (MISRA/ISO rules are enforced by tooling, described only in own words).
-- Merge gate: a skill change merges only if the golden suite improves or holds
-  with equal-or-lower loop count. `deepgent evals run --diff` produces the
-  evidence. Skills are code; they go through PRs and CI.
+Migrated to docs/skills.md (format, launch set, content rules, merge gate).
 
 ## 12. MCP servers
 
-[MIGRATE -> docs/mcp.md after Phase 0]
-
-- board-farm (local, Phase 2): tools `list_boards`, `lease`, `release`,
-  `deploy`, `exec`, `capture_metrics`, `power`. Board registry in
-  `~/.deepgent/boards.toml`. All destructive tools tagged for safety_gate.
-- datasheet-rag (server, Phase 3): tools `search(query, chip?, l4t?)`,
-  `get_chunk(id)`. Returns chunks with {doc, section, version, chip, hash}.
-  Ingestion pipeline (server side): table-aware PDF extraction, chunk by
-  section/register block, metadata: chip, silicon rev, doc version, applicable
-  L4T/JetPack range. Errata ingested separately with elevated retrieval weight.
-- knowledge-matrix (server, Phase 4): `query_claim(stack...)` ->
-  {status: verified_pass|verified_fail|unknown, evidence_run_id, verified_at,
-  versions}. Claims are only written by the eval/verification pipeline, never by
-  the model directly.
-- failure-corpus (server, Phase 4): `search_symptom(text, hw, versions)` ->
-  ranked tuples {symptom, hw_config, version_matrix, root_cause, fix,
-  verification_run_id}.
-- artifact-store (local first): content-addressed storage of engines, wheels,
-  images, reports under `.deepgent/runs/`.
-- carla-sim (Phase 5): scenario run + metrics for AV behavior tasks.
+Migrated to docs/mcp.md (board-farm, datasheet-rag, knowledge-matrix,
+failure-corpus, artifact-store, carla-sim).
 
 ## 13. Versions manifest
 
@@ -370,45 +336,13 @@ deepgent sweep --grid FILE                          # Phase 5
 
 ## 17. Golden tasks and evals
 
-[MIGRATE -> docs/evals.md after Phase 0]
-
-Golden task YAML schema:
-
-```yaml
-id: gt-0007
-title: INT8 quantize yolo detector within 1pt mAP
-class: perception/quantization
-board: agx-orin
-skills: [tensorrt-quantization]
-inputs: { model: fixtures/y11m.onnx, calib: fixtures/calib_256/ }
-success:
-  - metric: map50_95_delta, op: ">=", value: -1.0
-  - metric: p99_latency_ms, op: "<=", value: 25
-  - metric: loop_count, op: "<=", value: 6
-budget_usd: 1.50
-timeout_min: 30
-```
-
-- Launch target: 25 goldens across bring-up, quantization, pipelines, drivers,
-  debugging. Each scored mechanically; no LLM-judged goldens.
-- Regression gate: CI blocks merge if any previously passing golden fails or
-  aggregate cost/loop-count regresses >15% without a justification label.
-- Long-horizon ambition (Phase 5+): publish a public subset as BringupBench.
+Migrated to docs/evals.md (YAML schema, launch target, regression gate,
+BringupBench ambition, Phase 0 implementation notes). No LLM-judged goldens.
 
 ## 18. Telemetry, matrix, corpus schemas
 
-[MIGRATE -> docs/schemas.md after Phase 0]
-
-- task_record: id, ts, class, board, model_mix, tokens, usd, wall_s, loops,
-  outcome, failure_tag (taxonomy below), artifacts_path.
-- failure taxonomy v0: build_toolchain, build_deps, static_analysis, unit_test,
-  deploy_ssh, runtime_crash, perf_miss, accuracy_miss, thermal, flaky_hw,
-  knowledge_gap, harness_bug.
-- matrix_claim: {stack: {l4t, cuda, trt, ds, ros, sensor, serdes}, claim,
-  status, evidence_run_id, verified_at}. Written only by verified runs.
-- corpus_tuple: {symptom, hw_config, versions, root_cause, fix_diff_ref,
-  verification_run_id, ts}. Candidate tuples auto-drafted by telemetry_tap on
-  any failed->passed transition; owner approves before server upload.
+Migrated to docs/schemas.md (task_record, failure taxonomy v0, matrix_claim,
+corpus_tuple).
 
 ## 19. Knowledge layer split (do not violate)
 
