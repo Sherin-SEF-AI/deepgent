@@ -16,7 +16,6 @@ from deepgent.agents import build_agent_definitions
 from deepgent.config import DeepgentSettings
 from deepgent.core.budget import BudgetTracker
 from deepgent.errors import TaskExecutionError
-from deepgent.hooks import build_hooks
 
 _logger = structlog.get_logger(__name__)
 
@@ -61,6 +60,10 @@ class Orchestrator:
     def build_options(self, tracker: BudgetTracker | None = None) -> ClaudeAgentOptions:
         """Session options with every field from CLAUDE.md section 7 set
         explicitly; nothing relies on ambient defaults."""
+        # Deferred import: hooks depend on core.budget, so a module-level
+        # import here would make deepgent.hooks unimportable on its own.
+        from deepgent.hooks import build_hooks
+
         if tracker is None:
             tracker = BudgetTracker(self._settings)
         return ClaudeAgentOptions(

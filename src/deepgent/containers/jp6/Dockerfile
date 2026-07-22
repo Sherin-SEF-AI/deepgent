@@ -9,4 +9,10 @@ LABEL org.opencontainers.image.title="deepgent jp6 toolchain" \
 
 ENV PATH=/usr/local/cuda/bin:${PATH}
 
+# Static analysis for misra_gate (section 10): cppcheck ships the MISRA addon
+# (rule numbers only; no licensed rule text is bundled or fetched).
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends clang-tidy cppcheck \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /workspace

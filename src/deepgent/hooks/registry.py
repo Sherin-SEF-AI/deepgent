@@ -6,6 +6,7 @@ from claude_agent_sdk.types import HookEvent
 from deepgent.config import DeepgentSettings
 from deepgent.core.budget import BudgetTracker
 from deepgent.hooks.budget_guard import make_budget_guard
+from deepgent.hooks.misra_gate import make_misra_gate
 from deepgent.hooks.safety_gate import BOARD_FARM_TOOL_PREFIX, make_safety_gate
 from deepgent.hooks.scope_lock import scope_lock
 
@@ -22,5 +23,8 @@ def build_hooks(
                 hooks=[make_safety_gate(settings)],
             )
         ],
-        "PostToolUse": [HookMatcher(hooks=[make_budget_guard(tracker)])],
+        "PostToolUse": [
+            HookMatcher(hooks=[make_budget_guard(tracker)]),
+            HookMatcher(matcher="Write|Edit", hooks=[make_misra_gate()]),
+        ],
     }
