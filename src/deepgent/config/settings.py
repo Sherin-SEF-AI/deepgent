@@ -55,6 +55,13 @@ class PricingTiers(BaseModel):
     haiku: TierPricing
 
 
+class KnowledgeSettings(BaseModel):
+    """Knowledge API access (section 19: server-side, authenticated)."""
+
+    api_url: str | None = None
+    token_env: str = "DEEPGENT_KNOWLEDGE_TOKEN"
+
+
 class DeepgentSettings(BaseSettings):
     """Runtime settings, overridable via DEEPGENT_ environment variables."""
 
@@ -65,6 +72,7 @@ class DeepgentSettings(BaseSettings):
     models: ModelTiers
     pricing: PricingTiers
     budget: BudgetSettings = BudgetSettings()
+    knowledge: KnowledgeSettings = KnowledgeSettings()
     default_board: str | None = None
     telemetry_enabled: bool = True
     permission_mode: PermissionMode = "default"

@@ -10,6 +10,7 @@ requires-python = ">=3.12"
 dependencies = [
     "asyncssh>=2.24.0",
     "claude-agent-sdk==0.2.125",
+    "httpx>=0.28.1",
     "pydantic-settings>=2.14.2",
     "pyyaml>=6.0.3",
     "structlog>=26.1.0",
@@ -31,10 +32,22 @@ dev = [
     "pytest>=8.3",
     "types-pyyaml>=6.0.12.20260518",
 ]
+server = [
+    "deepgent-server",
+    "fastapi>=0.139.2",
+    "pypdf>=6.14.2",
+    "uvicorn>=0.51.0",
+]
 
 [build-system]
 requires = ["uv_build>=0.11,<0.12"]
 build-backend = "uv_build"
+
+[tool.uv.workspace]
+members = ["server"]
+
+[tool.uv.sources]
+deepgent-server = { workspace = true }
 
 [tool.ruff]
 target-version = "py312"
@@ -48,7 +61,7 @@ extend-immutable-calls = ["typer.Argument", "typer.Option"]
 
 [tool.mypy]
 strict = true
-files = ["src"]
+files = ["src", "server"]
 python_version = "3.12"
 
 [tool.pytest.ini_options]

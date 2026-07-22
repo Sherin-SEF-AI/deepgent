@@ -23,3 +23,7 @@ class BoardError(DeepgentError):
 
 class GoldenError(DeepgentError):
     """A golden task definition or run is invalid."""
+
+
+class KnowledgeError(DeepgentError):
+    """The knowledge API is unreachable, unauthorized, or returned an error."""

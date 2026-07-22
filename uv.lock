@@ -9,6 +9,12 @@ resolution-markers = [
     "python_full_version < '3.14' and sys_platform != 'win32'",
 ]
 
+[manifest]
+members = [
+    "deepgent",
+    "deepgent-server",
+]
+
 [[package]]
 name = "annotated-doc"
 version = "0.0.4"
@@ -293,6 +299,7 @@ source = { editable = "." }
 dependencies = [
     { name = "asyncssh" },
     { name = "claude-agent-sdk" },
+    { name = "httpx" },
     { name = "pydantic-settings" },
     { name = "pyyaml" },
     { name = "structlog" },
@@ -307,11 +314,18 @@ dev = [
     { name = "ruff" },
     { name = "types-pyyaml" },
 ]
+server = [
+    { name = "deepgent-server" },
+    { name = "fastapi" },
+    { name = "pypdf" },
+    { name = "uvicorn" },
+]
 
 [package.metadata]
 requires-dist = [
     { name = "asyncssh", specifier = ">=2.24.0" },
     { name = "claude-agent-sdk", specifier = "==0.2.125" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "pydantic-settings", specifier = ">=2.14.2" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "structlog", specifier = ">=26.1.0" },
@@ -325,6 +339,45 @@ dev = [
     { name = "pytest", specifier = ">=8.3" },
     { name = "ruff", specifier = ">=0.14" },
     { name = "types-pyyaml", specifier = ">=6.0.12.20260518" },
+]
+server = [
+    { name = "deepgent-server", editable = "server" },
+    { name = "fastapi", specifier = ">=0.139.2" },
+    { name = "pypdf", specifier = ">=6.14.2" },
+    { name = "uvicorn", specifier = ">=0.51.0" },
+]
+
+[[package]]
+name = "deepgent-server"
+version = "0.1.0"
+source = { editable = "server" }
+dependencies = [
+    { name = "fastapi" },
+    { name = "pypdf" },
+    { name = "uvicorn" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fastapi", specifier = ">=0.121" },
+    { name = "pypdf", specifier = ">=6.14" },
+    { name = "uvicorn", specifier = ">=0.51" },
+]
+
+[[package]]
+name = "fastapi"
+version = "0.139.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "annotated-doc" },
+    { name = "pydantic" },
+    { name = "starlette" },
+    { name = "typing-extensions" },
+    { name = "typing-inspection" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/cd/95/d3f0ae10836324a2eab98a52b61210ac609f08200bf4bb0dc8132d32f78a/fastapi-0.139.2.tar.gz", hash = "sha256:333145a6891e9b5b3cfceb69baf817e8240cde4d4588ae5a10bf56ffacb6255e", size = 423428, upload-time = "2026-07-16T15:06:17.912Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5f/c7/cb03251d9dfb177246a9809a76f189d21df32dbd4a845951881d11323b7f/fastapi-0.139.2-py3-none-any.whl", hash = "sha256:b9ad015a835173d59865e2f5d8296fbc2b317bf56a2ba1a5bfbdd03de2fd4b1c", size = 130234, upload-time = "2026-07-16T15:06:19.557Z" },
 ]
 
 [[package]]
@@ -741,6 +794,15 @@ wheels = [
 [package.optional-dependencies]
 crypto = [
     { name = "cryptography" },
+]
+
+[[package]]
+name = "pypdf"
+version = "6.14.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/03/72/7dfd5ff1c9c37de97a731701f51af091325f123d9d4270361c9c69e4431f/pypdf-6.14.2.tar.gz", hash = "sha256:7873f502fe4385e79539b21d872392dc0c4e3714327c15881cbc7fbfd1f95b25", size = 6491182, upload-time = "2026-06-23T14:18:30.859Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/49/e6/136aa8993a2ae7214e0b0ef2edaa0d2e08d1d4e4982635b08a835ff31ec8/pypdf-6.14.2-py3-none-any.whl", hash = "sha256:3f07891af76dc002657e04993ab9b4de81de29f9013b9761d0b7968bff12e946", size = 349514, upload-time = "2026-06-23T14:18:28.867Z" },
 ]
 
 [[package]]

@@ -11,6 +11,7 @@ from claude_agent_sdk import (
     TextBlock,
     query,
 )
+from claude_agent_sdk.types import McpServerConfig
 
 from deepgent.agents import build_agent_definitions
 from deepgent.config import DeepgentSettings
@@ -64,20 +65,25 @@ class Orchestrator:
         # import here would make deepgent.hooks unimportable on its own.
         from deepgent.boards import build_board_farm_server
         from deepgent.hooks import build_hooks
-        from deepgent.knowledge import sync_skills
+        from deepgent.knowledge import build_knowledge_server, sync_skills
 
         if tracker is None:
             tracker = BudgetTracker(self._settings)
         # Context assembly (lifecycle step 2): resolve skill packs into the
         # session project so the harness discovers them via setting_sources.
         skill_names = sync_skills(self._cwd)
+        # Only hardware-runner touches boards, only researcher/architect get
+        # knowledge tools (section 8); safety_gate covers destructive board
+        # ops and fact_guard enforces provenance on knowledge answers.
+        mcp_servers: dict[str, McpServerConfig] = {"board_farm": build_board_farm_server()}
+        knowledge_server = build_knowledge_server(self._settings)
+        if knowledge_server is not None:
+            mcp_servers["knowledge"] = knowledge_server
         return ClaudeAgentOptions(
             allowed_tools=list(MAIN_SESSION_TOOLS),
             disallowed_tools=[],
             permission_mode=self._settings.permission_mode,
-            # Only the hardware-runner subagent is granted these tools
-            # (section 8); safety_gate covers the destructive ones.
-            mcp_servers={"board_farm": build_board_farm_server()},
+            mcp_servers=mcp_servers,
             agents=build_agent_definitions(self._settings, skill_names),
             hooks=build_hooks(self._settings, tracker),
             setting_sources=["project"],
