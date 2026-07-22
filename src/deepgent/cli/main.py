@@ -420,6 +420,45 @@ def init(
 
 
 @app.command()
+def report(
+    run_id: str | None = typer.Argument(None, help="Task/session id; omit for recent tasks."),
+    debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
+) -> None:
+    """Show task telemetry: tokens, cost, loops, and outcomes (section 9)."""
+    from deepgent.telemetry import TelemetryStore
+
+    _configure_logging(debug)
+    store = TelemetryStore()
+    if run_id is not None:
+        record = store.get_task(run_id)
+        if record is None:
+            _fail(f"no task record with id '{run_id}'", debug=debug)
+            return
+        typer.echo(f"id:        {record.id}")
+        typer.echo(f"class:     {record.task_class}")
+        typer.echo(f"board:     {record.board or '-'}")
+        typer.echo(f"outcome:   {record.outcome}")
+        typer.echo(f"loops:     {record.loops}")
+        typer.echo(f"tokens:    {record.tokens}")
+        typer.echo(f"usd:       {record.usd if record.usd is not None else '-'}")
+        typer.echo(f"wall_s:    {record.wall_s:.1f}")
+        typer.echo(f"model_mix: {record.model_mix}")
+        if record.failure_tag:
+            typer.echo(f"failure:   {record.failure_tag}")
+        return
+    records = store.task_records()
+    if not records:
+        typer.echo("no task records yet; run a task first")
+        return
+    for record in records:
+        usd = f"${record.usd:.2f}" if record.usd is not None else "-"
+        typer.echo(
+            f"{record.id}  {record.outcome:7s}  loops={record.loops:<3d} "
+            f"tokens={record.tokens:<8d} {usd:>7s}  {record.wall_s:6.1f}s"
+        )
+
+
+@app.command()
 def doctor(
     debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks on check failures."),
 ) -> None:

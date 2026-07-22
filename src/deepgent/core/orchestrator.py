@@ -2,8 +2,12 @@
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import structlog
+
+if TYPE_CHECKING:
+    from deepgent.telemetry import TelemetryStore
 from claude_agent_sdk import (
     AssistantMessage,
     ClaudeAgentOptions,
@@ -57,6 +61,16 @@ class Orchestrator:
         self._settings = settings
         self._cwd = cwd
         self._max_turns = max_turns if max_turns is not None else settings.max_turns
+        self._store: TelemetryStore | None = None
+
+    def _telemetry_store(self) -> "TelemetryStore | None":
+        from deepgent.telemetry import TelemetryStore
+
+        if not self._settings.telemetry_enabled:
+            return None
+        if self._store is None:
+            self._store = TelemetryStore()
+        return self._store
 
     def build_options(self, tracker: BudgetTracker | None = None) -> ClaudeAgentOptions:
         """Session options with every field from CLAUDE.md section 7 set
@@ -85,7 +99,7 @@ class Orchestrator:
             permission_mode=self._settings.permission_mode,
             mcp_servers=mcp_servers,
             agents=build_agent_definitions(self._settings, skill_names),
-            hooks=build_hooks(self._settings, tracker),
+            hooks=build_hooks(self._settings, tracker, self._telemetry_store()),
             setting_sources=["project"],
             cwd=self._cwd,
             max_turns=self._max_turns,
@@ -97,10 +111,13 @@ class Orchestrator:
 
     async def run_task(self, task: str) -> TaskOutcome:
         """Run a single task to completion and return its outcome."""
+        import time
+
         tracker = BudgetTracker(self._settings)
         options = self.build_options(tracker)
         log = _logger.bind(cwd=str(self._cwd), model=options.model)
         log.info("task_started", task=task)
+        started = time.monotonic()
 
         result: ResultMessage | None = None
         async for message in _run_query(prompt=task, options=options):
@@ -124,10 +141,37 @@ class Orchestrator:
             num_turns=result.num_turns,
             total_cost_usd=result.total_cost_usd,
         )
+        self._record_task(result, tracker, time.monotonic() - started)
         return TaskOutcome(
             result=result.result or "",
             is_error=result.is_error,
             num_turns=result.num_turns,
             total_cost_usd=result.total_cost_usd,
             session_id=result.session_id,
+        )
+
+    def _record_task(self, result: ResultMessage, tracker: BudgetTracker, wall_s: float) -> None:
+        """Every task emits telemetry (section 1); best-effort, never fatal."""
+        from deepgent.telemetry import TaskRecord
+
+        store = self._telemetry_store()
+        if store is None:
+            return
+        import time
+
+        store.record_task(
+            TaskRecord(
+                id=result.session_id,
+                ts=time.time(),
+                # The deterministic intake classifier assigns real classes
+                # later; every one-shot task shares a class until then.
+                task_class="task/oneshot",
+                board=self._settings.default_board,
+                model_mix=tracker.model_mix,
+                tokens=tracker.total_tokens,
+                usd=result.total_cost_usd,
+                wall_s=wall_s,
+                loops=result.num_turns,
+                outcome="error" if result.is_error else "success",
+            )
         )

@@ -20,6 +20,15 @@ def settings() -> DeepgentSettings:
     return load_settings(REPO_ROOT)
 
 
+@pytest.fixture(autouse=True)
+def _isolated_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The orchestrator writes telemetry under HOME; keep tests off the
+    real one."""
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+
+
 @pytest.mark.unit
 def test_options_set_all_section_7_fields(settings: DeepgentSettings, tmp_path: Path) -> None:
     options = Orchestrator(settings=settings, cwd=tmp_path).build_options()
@@ -29,7 +38,14 @@ def test_options_set_all_section_7_fields(settings: DeepgentSettings, tmp_path: 
     assert isinstance(options.mcp_servers, dict) and "board_farm" in options.mcp_servers
     assert options.agents is not None and len(options.agents) == 5
     assert options.hooks is not None
-    assert set(options.hooks) == {"UserPromptSubmit", "PreToolUse", "PostToolUse"}
+    assert set(options.hooks) == {
+        "UserPromptSubmit",
+        "PreToolUse",
+        "PostToolUse",
+        "PostToolUseFailure",
+        "Stop",
+        "SubagentStop",
+    }
     assert options.setting_sources == ["project"]
     assert options.cwd == tmp_path
     assert options.max_turns == settings.max_turns

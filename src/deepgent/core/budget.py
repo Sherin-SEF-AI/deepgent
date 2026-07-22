@@ -27,6 +27,8 @@ class BudgetTracker:
         self._settings = settings
         self.cap_usd = settings.budget.per_task_usd
         self.spent_usd = 0.0
+        self.total_tokens = 0
+        self.model_mix: dict[str, int] = {}
 
     def _pricing_for(self, model: str) -> TierPricing:
         tiers = self._settings.models
@@ -46,6 +48,9 @@ class BudgetTracker:
         """Add one assistant message's token usage to the running estimate."""
         if not usage:
             return
+        tokens = int(usage.get("input_tokens", 0)) + int(usage.get("output_tokens", 0))
+        self.total_tokens += tokens
+        self.model_mix[model] = self.model_mix.get(model, 0) + tokens
         price = self._pricing_for(model)
         self.spent_usd += (
             float(usage.get("input_tokens", 0)) * price.input
