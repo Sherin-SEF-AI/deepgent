@@ -4,9 +4,7 @@ Domain-locked autonomous engineering agent for autonomous vehicles, computer
 vision, and embedded systems. Takes a task from natural language to a verified
 artifact running on target hardware at spec. Built on the Claude Agent SDK.
 
-Personal project of Sherin Joseph Roy (github.com/Sherin-SEF-AI). Not a
-DeepMost AI product.
-
+Personal project of Sherin Joseph Roy (github.com/Sherin-SEF-AI). 
 ![deepgent desktop GUI](docs/img/demo.gif)
 
 ## Scope
