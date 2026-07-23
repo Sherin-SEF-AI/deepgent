@@ -18,6 +18,7 @@ from deepgent.knowledge.matrix import (
     Claim,
     analyze,
     detect_contradictions,
+    hop_distance,
     load_claims,
     load_rules,
     next_to_verify,
@@ -54,6 +55,25 @@ def test_query_transitive_inference() -> None:
 def test_query_no_inference_without_rule() -> None:
     claims = [Claim(stack={"l4t": "36.4.3"}, component="trt10", works=True)]
     assert query(claims, {"l4t": "36.4.4"}, "trt10").works is None
+
+
+def test_hop_distance_multi_hop() -> None:
+    # Two overlapping groups chain 36.4.3 -> 36.4.4 -> 36.4.5.
+    rules = {"l4t": [frozenset({"36.4.3", "36.4.4"}), frozenset({"36.4.4", "36.4.5"})]}
+    assert hop_distance(rules, "l4t", "36.4.3", "36.4.3") == 0
+    assert hop_distance(rules, "l4t", "36.4.3", "36.4.4") == 1
+    assert hop_distance(rules, "l4t", "36.4.3", "36.4.5") == 2
+    assert hop_distance(rules, "l4t", "36.4.3", "40.0") is None
+
+
+def test_query_multi_hop_decays_with_distance() -> None:
+    claims = [Claim(stack={"l4t": "36.4.3"}, component="trt10", works=True)]
+    rules = {"l4t": [frozenset({"36.4.3", "36.4.4"}), frozenset({"36.4.4", "36.4.5"})]}
+    # Two hops away: confidence decays as decay**2.
+    verdict = query(claims, {"l4t": "36.4.5"}, "trt10", rules, decay=0.7)
+    assert verdict.works is True
+    assert verdict.confidence == pytest.approx(0.49)
+    assert "2 version-equivalence hop" in verdict.basis
 
 
 def test_detect_contradictions() -> None:

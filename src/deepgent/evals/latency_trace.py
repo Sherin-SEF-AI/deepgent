@@ -20,6 +20,7 @@ import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+from statistics import pstdev
 
 import structlog
 
@@ -51,6 +52,13 @@ class StageLatency:
     p99: float
     mean: float
     max: float
+    min: float = 0.0
+    jitter: float = 0.0  # population standard deviation of the stage's samples
+
+    @property
+    def tail_ratio(self) -> float:
+        """p99/p50: how much worse the tail is than the median (>=1)."""
+        return self.p99 / self.p50 if self.p50 > 0 else 1.0
 
 
 @dataclass
@@ -62,6 +70,7 @@ class LatencyTrace:
     g2g_p50: float | None = None
     g2g_p95: float | None = None
     g2g_p99: float | None = None
+    g2g_jitter: float | None = None
     budget_ms: float | None = None
 
     @property
@@ -80,7 +89,12 @@ class LatencyTrace:
         return {
             "frames": self.frames,
             "budget_ms": self.budget_ms,
-            "glass_to_glass": {"p50": self.g2g_p50, "p95": self.g2g_p95, "p99": self.g2g_p99},
+            "glass_to_glass": {
+                "p50": self.g2g_p50,
+                "p95": self.g2g_p95,
+                "p99": self.g2g_p99,
+                "jitter": self.g2g_jitter,
+            },
             "passed": self.passed,
             "bottleneck": None if self.bottleneck is None else self.bottleneck.name,
             "stages": [
@@ -92,13 +106,16 @@ class LatencyTrace:
                     "p99": s.p99,
                     "mean": s.mean,
                     "max": s.max,
+                    "min": s.min,
+                    "jitter": s.jitter,
+                    "tail_ratio": s.tail_ratio,
                 }
                 for s in self.stages
             ],
         }
 
     def render_report(self) -> str:
-        header = f"{'stage':<18} {'n':>5} {'p50':>7} {'p95':>7} {'p99':>7} {'max':>7}"
+        header = f"{'stage':<18} {'n':>5} {'p50':>7} {'p95':>7} {'p99':>7} {'jitter':>7} {'max':>7}"
         rows = [
             "# glass-to-glass latency trace",
             "",
@@ -111,12 +128,13 @@ class LatencyTrace:
             marker = "  <- bottleneck" if self.bottleneck is s else ""
             rows.append(
                 f"{s.name:<18} {s.count:>5} {s.p50:>7.2f} {s.p95:>7.2f} "
-                f"{s.p99:>7.2f} {s.max:>7.2f}{marker}"
+                f"{s.p99:>7.2f} {s.jitter:>7.2f} {s.max:>7.2f}{marker}"
             )
         rows.append("-" * len(header))
         rows.append(
             f"glass-to-glass p50/p95/p99 ms: "
             f"{_fmt(self.g2g_p50)} / {_fmt(self.g2g_p95)} / {_fmt(self.g2g_p99)}"
+            f"  (jitter {_fmt(self.g2g_jitter)})"
         )
         if self.budget_ms is not None:
             verdict = "PASS" if self.passed else "FAIL"
@@ -218,6 +236,8 @@ def analyze_trace(timings: list[StageTiming], budget_ms: float | None = None) ->
                 p99=percentile(samples, 99),
                 mean=sum(samples) / len(samples),
                 max=max(samples),
+                min=min(samples),
+                jitter=pstdev(samples) if len(samples) > 1 else 0.0,
             )
         )
 
@@ -230,6 +250,7 @@ def analyze_trace(timings: list[StageTiming], budget_ms: float | None = None) ->
     trace.g2g_p50 = percentile(totals, 50)
     trace.g2g_p95 = percentile(totals, 95)
     trace.g2g_p99 = percentile(totals, 99)
+    trace.g2g_jitter = pstdev(totals) if len(totals) > 1 else 0.0
     return trace
 
 

@@ -12,6 +12,7 @@ carry confidence 1.0; inferences decay it.
 """
 
 import json
+from collections import deque
 from dataclasses import dataclass, field
 
 # component -> list of interchangeable version groups (e.g. ABI-compatible L4T
@@ -88,33 +89,65 @@ def _groups_for(rules: CompatibilityRules, component: str) -> list[frozenset[str
     return rules.get(component, [])
 
 
-def _interchangeable(rules: CompatibilityRules, component: str, a: str, b: str) -> bool:
+def _equiv_adjacency(rules: CompatibilityRules, component: str) -> dict[str, set[str]]:
+    """Adjacency of the version-equivalence graph for a component.
+
+    Each equivalence group is a clique; overlapping groups therefore connect,
+    so equivalence is transitive across chained rules (36.4.3~36.4.4 and
+    36.4.4~36.4.5 imply 36.4.3 reaches 36.4.5 in two hops).
+    """
+    adjacency: dict[str, set[str]] = {}
+    for group in _groups_for(rules, component):
+        members = list(group)
+        for member in members:
+            adjacency.setdefault(member, set()).update(m for m in members if m != member)
+    return adjacency
+
+
+def hop_distance(rules: CompatibilityRules, component: str, a: str, b: str) -> int | None:
+    """Shortest number of equivalence hops from a to b, or None if unreachable.
+
+    0 means the values are identical; 1 a direct rule; larger values a chain of
+    interchangeable releases. Distance drives confidence decay, so a farther
+    inference is trusted less.
+    """
     if a == b:
-        return True
-    return any(a in group and b in group for group in _groups_for(rules, component))
+        return 0
+    adjacency = _equiv_adjacency(rules, component)
+    if a not in adjacency:
+        return None
+    seen = {a}
+    queue: deque[tuple[str, int]] = deque([(a, 0)])
+    while queue:
+        node, dist = queue.popleft()
+        for neighbour in adjacency.get(node, ()):
+            if neighbour == b:
+                return dist + 1
+            if neighbour not in seen:
+                seen.add(neighbour)
+                queue.append((neighbour, dist + 1))
+    return None
 
 
 def _stack_applies(
     claim_stack: dict[str, str], query_stack: dict[str, str], rules: CompatibilityRules
 ) -> int | None:
-    """Substitution count if the claim applies to the query, else None.
+    """Total equivalence hops if the claim applies to the query, else None.
 
-    A claim applies when every component it names either equals the query's
-    value or is interchangeable with it under the rules. The return value is
-    how many components were satisfied by interchange rather than equality.
+    A claim applies when every component it names is reachable from the query's
+    value under the rules. The return value is the summed hop distance across
+    components (0 = an exact match on every component).
     """
-    substitutions = 0
+    total_hops = 0
     for key, value in claim_stack.items():
         query_value = query_stack.get(key)
         if query_value is None:
             return None
-        if query_value == value:
-            continue
-        if _interchangeable(rules, key, value, query_value):
-            substitutions += 1
-        else:
+        distance = hop_distance(rules, key, value, query_value)
+        if distance is None:
             return None
-    return substitutions
+        total_hops += distance
+    return total_hops
 
 
 def query(
@@ -130,15 +163,15 @@ def query(
     for claim in claims:
         if claim.component != component:
             continue
-        subs = _stack_applies(claim.stack, stack, rules)
-        if subs is None:
+        hops = _stack_applies(claim.stack, stack, rules)
+        if hops is None:
             continue
-        if subs == 0:
+        if hops == 0:
             confidence = claim.confidence
             basis = f"verified ({claim.source})" if claim.confidence >= 1.0 else claim.source
         else:
-            confidence = claim.confidence * (decay**subs)
-            basis = f"inferred via {subs} version-equivalence substitution(s)"
+            confidence = claim.confidence * (decay**hops)
+            basis = f"inferred via {hops} version-equivalence hop(s)"
         candidate = Verdict(works=claim.works, confidence=confidence, basis=basis)
         if best is None or candidate.confidence > best.confidence:
             best = candidate

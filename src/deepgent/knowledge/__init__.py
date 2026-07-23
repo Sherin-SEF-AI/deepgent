@@ -26,6 +26,7 @@ from deepgent.knowledge.matrix import (
     VerifyCandidate,
     analyze,
     detect_contradictions,
+    hop_distance,
     next_to_verify,
     query,
 )
@@ -108,6 +109,7 @@ __all__ = [
     "default_skills_dir",
     "detect_contradictions",
     "evaluate_skills",
+    "hop_distance",
     "list_skills",
     "load_ablation",
     "load_ablation_file",

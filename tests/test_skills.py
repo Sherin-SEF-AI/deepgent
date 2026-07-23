@@ -99,7 +99,13 @@ class TestRepoSkills:
         repo_root = Path(__file__).resolve().parent.parent
         packs = list_skills(repo_root / "skills")
         names = {pack.name for pack in packs}
-        assert names >= {"jetson-bringup", "tensorrt-quantization", "ros2-systems"}
+        assert names >= {
+            "jetson-bringup",
+            "tensorrt-quantization",
+            "ros2-systems",
+            "deepgent-verification-workflow",
+            "edge-perf-methodology",
+        }
         for pack in packs:
             body = (pack.path / "SKILL.md").read_text()
             assert len(body.splitlines()) <= 150, f"{pack.name} SKILL.md exceeds 150 lines"

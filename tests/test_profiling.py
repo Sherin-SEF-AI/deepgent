@@ -208,6 +208,17 @@ def test_analyze_trace_empty() -> None:
     assert trace.passed is None
 
 
+def test_analyze_trace_jitter_and_min() -> None:
+    # infer stage alternates 8 and 12 ms -> mean 10, jitter (pstdev) 2, min 8.
+    text = "\n".join(f"STAGE infer {8 if i % 2 == 0 else 12} frame={i}" for i in range(10))
+    trace = analyze_trace(parse_stage_lines(text))
+    stage = trace.stages[0]
+    assert stage.min == pytest.approx(8.0)
+    assert stage.jitter == pytest.approx(2.0)
+    assert stage.tail_ratio >= 1.0
+    assert trace.g2g_jitter == pytest.approx(2.0)
+
+
 # --- Latency trace: on-target path with a runner double --------------------
 
 
