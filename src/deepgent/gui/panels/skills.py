@@ -1,8 +1,11 @@
 """Skills panel: list local skill packs and preview a pack's SKILL.md."""
 
+from pathlib import Path
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QHBoxLayout,
+    QLineEdit,
     QListWidget,
     QListWidgetItem,
     QSplitter,
@@ -40,7 +43,29 @@ class SkillsPanel(QWidget):
         splitter.setStretchFactor(1, 1)
         root.addWidget(splitter, 1)
 
+        eval_row = QHBoxLayout()
+        eval_row.setSpacing(4)
+        self._ablation = QLineEdit()
+        self._ablation.setPlaceholderText("ablation .json path (skill lift analysis)")
+        eval_btn = toolbar_button("Evaluate lift", role="accent")
+        eval_btn.clicked.connect(self._on_evaluate)
+        eval_row.addWidget(self._ablation, 1)
+        eval_row.addWidget(eval_btn)
+        root.addLayout(eval_row)
+
         self.refresh()
+
+    def _on_evaluate(self) -> None:
+        ablation = self._ablation.text().strip()
+        if not ablation:
+            return
+        try:
+            report = self._controller.evaluate(Path(ablation))
+        except Exception as exc:  # surfaced, not swallowed
+            self._preview.append_line(f"[error] {exc}")
+            return
+        self._preview.clear_log()
+        self._preview.append_line(report.render())
 
     def refresh(self) -> None:
         self._list.clear()

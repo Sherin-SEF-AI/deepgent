@@ -22,6 +22,8 @@ class KnowledgePanel(QWidget):
         self._task.finished.connect(self._on_result)
         self._premortem = AsyncTask(self)
         self._premortem.finished.connect(self._on_premortem)
+        self._reflect = AsyncTask(self)
+        self._reflect.finished.connect(self._on_reflect)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(8, 8, 8, 8)
@@ -70,11 +72,40 @@ class KnowledgePanel(QWidget):
         pm_row.addWidget(pm_btn)
         root.addLayout(pm_row)
 
+        reflect_row = QHBoxLayout()
+        reflect_row.setSpacing(4)
+        self._rf_tool = QLineEdit()
+        self._rf_tool.setPlaceholderText("failed tool (e.g. Bash)")
+        self._rf_tool.setFixedWidth(150)
+        self._rf_error = QLineEdit()
+        self._rf_error.setPlaceholderText("reflexion: paste the failure error text")
+        rf_btn = toolbar_button("Reflect", role="accent")
+        rf_btn.clicked.connect(self._on_reflect_run)
+        reflect_row.addWidget(self._rf_tool)
+        reflect_row.addWidget(self._rf_error, 1)
+        reflect_row.addWidget(rf_btn)
+        root.addLayout(reflect_row)
+
         self._log = LogView()
         root.addWidget(self._log, 1)
 
         self._task.failed.connect(lambda m: self._log.append_line(f"[error] {m}"))
         self._premortem.failed.connect(lambda m: self._log.append_line(f"[error] {m}"))
+        self._reflect.failed.connect(lambda m: self._log.append_line(f"[error] {m}"))
+
+    def _on_reflect_run(self) -> None:
+        tool = self._rf_tool.text().strip()
+        error = self._rf_error.text().strip()
+        if not (tool and error) or self._reflect.running:
+            return
+        self._log.append_line(f"reflexion on {tool} failure...")
+        self._reflect.start(lambda: self._controller.reflect(tool, error))
+
+    def _on_reflect(self, result: object) -> None:
+        from deepgent.core.reflexion import Reflexion
+
+        assert isinstance(result, Reflexion)
+        self._log.append_line(result.render())
 
     def _on_premortem_run(self) -> None:
         symptom = self._pm_symptom.text().strip()

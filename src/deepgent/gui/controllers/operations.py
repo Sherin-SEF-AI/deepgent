@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from deepgent.core.reflexion import Reflexion
     from deepgent.evals.accuracy import AccuracyResult
     from deepgent.evals.cuda_check import CudaCheckResult
     from deepgent.evals.fleet import FleetResult
@@ -21,6 +22,7 @@ if TYPE_CHECKING:
     from deepgent.knowledge.hardware_check import ConflictReport
     from deepgent.knowledge.matrix import MatrixAnalysis
     from deepgent.knowledge.premortem import PreMortem
+    from deepgent.knowledge.skill_lifecycle import LifecycleReport
 
 from deepgent.config import load_settings
 from deepgent.containers import ContainerBuilder, load_jp6_spec
@@ -122,6 +124,15 @@ class KnowledgeController:
         client = build_rag_client(load_settings())
         try:
             return await premortem(client, symptom, hw=hw, stack=stack)
+        finally:
+            await client.aclose()
+
+    async def reflect(self, tool: str, error: str, hw: str | None = None) -> "Reflexion":
+        from deepgent.core.reflexion import reflect_with_corpus
+
+        client = build_rag_client(load_settings())
+        try:
+            return await reflect_with_corpus(client, tool, error, hw=hw)
         finally:
             await client.aclose()
 
@@ -268,3 +279,8 @@ class MatrixController:
 class SkillsController:
     def packs(self) -> list[SkillPack]:
         return list_skills()
+
+    def evaluate(self, ablation_path: Path) -> "LifecycleReport":
+        from deepgent.knowledge.skill_lifecycle import analyze_lifecycle, load_ablation_file
+
+        return analyze_lifecycle(load_ablation_file(ablation_path))

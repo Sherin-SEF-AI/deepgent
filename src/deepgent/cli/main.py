@@ -732,6 +732,52 @@ def matrix_analyze_cmd(
         raise typer.Exit(code=1)
 
 
+@app.command("skills-eval")
+def skills_eval_cmd(
+    ablation: Path = typer.Option(..., "--ablation", help="Ablation JSON: skill/present/passed."),
+    debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
+) -> None:
+    """Measure each skill's causal lift and recommend promote/keep/retire (#13)."""
+    from deepgent.knowledge.skill_lifecycle import analyze_lifecycle, load_ablation_file
+
+    _configure_logging(debug)
+    try:
+        records = load_ablation_file(ablation)
+        report = analyze_lifecycle(records)
+    except (DeepgentError, OSError, ValueError, KeyError) as exc:
+        _fail(str(exc), debug=debug, exc=exc if isinstance(exc, DeepgentError) else None)
+        return
+    typer.echo(report.render())
+
+
+@app.command("reflect")
+def reflect_cmd(
+    tool: str = typer.Option(..., "--tool", help="Tool whose call failed (e.g. Bash)."),
+    error: str = typer.Option(..., "--error", help="The failure error text."),
+    hw: str | None = typer.Option(None, "--hw", help="Hardware filter for corpus search."),
+    debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
+) -> None:
+    """Classify a failure and produce a targeted, corpus-grounded replan (#15)."""
+    from deepgent.core.reflexion import reflect_with_corpus
+    from deepgent.knowledge import build_rag_client
+
+    _configure_logging(debug)
+
+    async def _run() -> object:
+        client = build_rag_client(load_settings())
+        try:
+            return await reflect_with_corpus(client, tool, error, hw=hw)
+        finally:
+            await client.aclose()
+
+    try:
+        result = asyncio.run(_run())
+    except DeepgentError as exc:
+        _fail(str(exc), debug=debug, exc=exc)
+        return
+    typer.echo(result.render())  # type: ignore[attr-defined]
+
+
 @app.command("premortem")
 def premortem_cmd(
     symptom: str = typer.Option(..., "--symptom", help="Task/symptom to pre-mortem."),
