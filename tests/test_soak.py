@@ -90,10 +90,12 @@ class _FakeSoakRunner:
         # the watchdog, the expected end for a continuous burn.
         return CommandResult(command, 124, "", "", True)
 
-    async def capture_tegrastats(self, duration_s: float, interval_ms: int = 500) -> str:
+    async def capture_metrics(self, duration_s: float, interval_ms: int = 500) -> dict[str, float]:
+        from deepgent.boards import parse_capture
+
         window = _FakeSoakRunner.windows[min(self._i, len(_FakeSoakRunner.windows) - 1)]
         self._i += 1
-        return window
+        return parse_capture(window).summary_metrics(interval_ms=interval_ms)
 
 
 @pytest.fixture
@@ -109,7 +111,7 @@ def fake_board(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
             type="jetson-agx-orin",
         )
     )
-    monkeypatch.setattr(soak_module, "BoardRunner", _FakeSoakRunner)
+    monkeypatch.setattr(soak_module, "open_runner", lambda board: _FakeSoakRunner(board))
     _FakeSoakRunner.dmesg_calls = 0
 
 
@@ -141,7 +143,7 @@ class TestSoakRunner:
         assert not result.survived
         assert result.anomaly is not None and result.anomaly.rule == "thermal_ceiling"
         assert result.phases_completed == []
-        assert (run_dir / "anomaly-tegrastats.txt").read_text().startswith("RAM")
+        assert (run_dir / "anomaly-metrics.json").is_file()
         assert "all quiet" in (run_dir / "anomaly-dmesg.txt").read_text()
         assert _FakeSoakRunner.dmesg_calls == 1
         assert "RESULT: ANOMALY" in (run_dir / "survival-report.md").read_text()

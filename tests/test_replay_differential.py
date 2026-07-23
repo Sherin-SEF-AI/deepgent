@@ -62,8 +62,10 @@ class _FakeRunner:
     async def get(self, remote: str, local: Path) -> None:
         Path(local).write_bytes(_FakeRunner.stream_bytes)
 
-    async def capture_tegrastats(self, duration_s: float, interval_ms: int = 500) -> str:
-        return _TEGRA * 4
+    async def capture_metrics(self, duration_s: float, interval_ms: int = 500) -> dict[str, float]:
+        from deepgent.boards import parse_capture
+
+        return parse_capture(_TEGRA * 4).summary_metrics(interval_ms=interval_ms)
 
 
 class TestReplay:
@@ -123,7 +125,7 @@ class TestDifferential:
     def test_runs_across_boards_and_compares(
         self, temp_home: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr(diff_module, "BoardRunner", _FakeRunner)
+        monkeypatch.setattr(diff_module, "open_runner", lambda board: _FakeRunner(board))
         artifact = temp_home / "detector"
         artifact.write_bytes(b"\x7fELF-fake")
         runner = DifferentialRunner(temp_home)
@@ -147,7 +149,7 @@ class TestDifferential:
     def test_persist_writes_json_and_table(
         self, temp_home: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr(diff_module, "BoardRunner", _FakeRunner)
+        monkeypatch.setattr(diff_module, "open_runner", lambda board: _FakeRunner(board))
         artifact = temp_home / "detector"
         artifact.write_bytes(b"x")
         runner = DifferentialRunner(temp_home)

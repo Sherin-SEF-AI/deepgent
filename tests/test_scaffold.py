@@ -20,6 +20,7 @@ SUBPACKAGES = [
     "evals",
     "telemetry",
     "config",
+    "host",
 ]
 
 

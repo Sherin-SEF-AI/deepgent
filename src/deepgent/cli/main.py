@@ -220,8 +220,9 @@ def boards_list() -> None:
         return
     for board in boards.values():
         caps = ",".join(board.capabilities) or "-"
+        where = "this machine" if board.transport == "local" else f"{board.ssh_user}@{board.host}"
         typer.echo(
-            f"{board.id}  {board.ssh_user}@{board.host}  type={board.type}  "
+            f"{board.id}  [{board.transport}] {where}  type={board.type}  "
             f"l4t={board.l4t or '-'}  caps={caps}  power={board.power_ctl}"
         )
 
@@ -746,6 +747,36 @@ def skills_list(
 
 
 @app.command()
+def setup(
+    force: bool = typer.Option(False, "--force", help="Overwrite an existing [host] config block."),
+    debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
+) -> None:
+    """Detect this system's specs and auto-configure deepgent for it."""
+    from deepgent.boards import register_local_target
+    from deepgent.host import apply_config, derive_config, detect_host
+
+    _configure_logging(debug)
+    profile = detect_host()
+    typer.echo(profile.render())
+    config = derive_config(profile)
+    try:
+        path = apply_config(profile, force=force)
+        if config.local_execution:
+            register_local_target(profile.device_class, list(config.capabilities), profile.os)
+    except DeepgentError as exc:
+        _fail(str(exc), debug=debug, exc=exc)
+        return
+    typer.secho(
+        f"configured: device_class={config.device_class}, toolchain={config.toolchain}, "
+        f"local_execution={config.local_execution}",
+        fg=typer.colors.GREEN,
+    )
+    typer.echo(f"wrote {path}")
+    if config.local_execution:
+        typer.echo("registered target 'local' (run tasks on this machine directly)")
+
+
+@app.command()
 def init(
     directory: Path = typer.Argument(Path("."), help="Project directory to initialize."),
 ) -> None:
@@ -826,6 +857,15 @@ def doctor(
             else typer.style("FAIL", fg=typer.colors.RED)
         )
         typer.echo(f"{mark} {name}: {detail}")
+
+    from deepgent.host import detect_host
+
+    profile = detect_host()
+    report(
+        "host",
+        True,
+        f"{profile.device_class} / {profile.arch} / accel={profile.accelerator}",
+    )
 
     py = sys.version_info
     report(

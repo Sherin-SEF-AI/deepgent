@@ -1,5 +1,6 @@
 """Verification layer: board farm client, SSH runner, and on-target metrics capture."""
 
+from deepgent.boards.factory import open_runner
 from deepgent.boards.farm import (
     SERVER_NAME,
     build_board_farm_server,
@@ -13,11 +14,14 @@ from deepgent.boards.leases import (
     release_lease,
     require_lease,
 )
+from deepgent.boards.local import LocalRunner
+from deepgent.boards.metrics import GenericSample, sample_once, summarize_generic
 from deepgent.boards.registry import (
     BoardConfig,
     add_board,
     get_board,
     load_registry,
+    register_local_target,
     registry_path,
     remove_board,
 )
@@ -35,7 +39,9 @@ __all__ = [
     "BoardConfig",
     "BoardRunner",
     "CommandResult",
+    "GenericSample",
     "Lease",
+    "LocalRunner",
     "TegrastatsCapture",
     "TegrastatsSample",
     "acquire_lease",
@@ -47,11 +53,15 @@ __all__ = [
     "get_board",
     "load_registry",
     "new_holder_id",
+    "open_runner",
     "parse_capture",
     "parse_line",
+    "register_local_target",
     "registry_path",
     "release_lease",
     "remove_board",
     "require_lease",
+    "sample_once",
+    "summarize_generic",
     "watchdog_command",
 ]

@@ -18,7 +18,7 @@ from pathlib import Path
 
 import structlog
 
-from deepgent.boards import BoardConfig, BoardRunner, get_board, parse_capture
+from deepgent.boards import BoardConfig, get_board, open_runner
 from deepgent.errors import BoardError
 
 _logger = structlog.get_logger(__name__)
@@ -102,7 +102,7 @@ async def _run_one_board(
     capture_s: float,
     cost_usd: float | None,
 ) -> BoardRun:
-    async with BoardRunner(board) as runner:
+    async with open_runner(board) as runner:
         await runner.run(f"mkdir -p {Path(remote_path).parent}", timeout_s=30)
         await runner.put(local_artifact, remote_path)
         await runner.run(f"chmod +x {remote_path}", timeout_s=30)
@@ -111,14 +111,11 @@ async def _run_one_board(
             result = await runner.run(run_command, timeout_s=capture_s)
             return result.exit_status, result.stdout + result.stderr
 
-        capture_task = asyncio.create_task(
-            runner.capture_tegrastats(capture_s, _CAPTURE_INTERVAL_MS)
-        )
+        capture_task = asyncio.create_task(runner.capture_metrics(capture_s, _CAPTURE_INTERVAL_MS))
         exit_status, output = await workload()
-        raw = await capture_task
+        metrics = await capture_task
         await runner.run(f"rm -f {remote_path}", timeout_s=30)
 
-    metrics = parse_capture(raw).summary_metrics(interval_ms=_CAPTURE_INTERVAL_MS)
     return BoardRun(
         board=board.id,
         exit_status=exit_status,

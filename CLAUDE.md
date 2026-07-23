@@ -43,8 +43,15 @@ gate, never left as prose here.
 ## 2. What deepgent is
 
 - A pip-installable CLI (`deepgent`, alias `dg`) plus an orchestrator built on the
-  Claude Agent SDK, toolchain containers, MCP servers, and SSH-attached target
-  boards.
+  Claude Agent SDK, toolchain containers, MCP servers, and target execution over
+  either SSH-attached boards or the local host.
+- Universal host support: on install, `deepgent setup` detects the machine's real
+  specification (OS, arch, CPU, RAM, accelerator, container runtime) and
+  auto-configures the toolchain and a `local` target for it. deepgent runs on and
+  targets desktops, laptops, Raspberry Pi, Jetson, and generic Linux/macOS hosts,
+  not only the Jetson board farm. This generalizes the *hardware*; the task
+  *domain* stays locked (prime directive: AV, CV, embedded, robotics-adjacent
+  edge AI only). Detection reads real system sources, never assuming a fact.
 - The client harness is open source. The knowledge layer (compatibility matrix,
   failure corpus, datasheet RAG) lives server-side behind an authenticated API and
   is queried at runtime, never shipped in the package. Skill packs are fetched at

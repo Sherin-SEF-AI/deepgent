@@ -15,6 +15,7 @@ import structlog
 from claude_agent_sdk import SdkMcpTool, create_sdk_mcp_server, tool
 from claude_agent_sdk.types import McpSdkServerConfig
 
+from deepgent.boards.factory import open_runner
 from deepgent.boards.leases import (
     DEFAULT_LEASE_TTL_S,
     acquire_lease,
@@ -24,8 +25,6 @@ from deepgent.boards.leases import (
     require_lease,
 )
 from deepgent.boards.registry import get_board, load_registry
-from deepgent.boards.runner import BoardRunner
-from deepgent.boards.tegrastats import parse_capture
 from deepgent.errors import DeepgentError
 
 _logger = structlog.get_logger(__name__)
@@ -113,7 +112,7 @@ def build_board_farm_tools(holder: str | None = None) -> list[SdkMcpTool[Any]]:
         try:
             board = get_board(str(args["board"]))
             require_lease(board.id, holder_id)
-            async with BoardRunner(board) as runner:
+            async with open_runner(board) as runner:
                 await runner.put(local, str(args["remote_path"]))
         except DeepgentError as exc:
             return _err(str(exc))
@@ -130,7 +129,7 @@ def build_board_farm_tools(holder: str | None = None) -> list[SdkMcpTool[Any]]:
         try:
             board = get_board(str(args["board"]))
             require_lease(board.id, holder_id)
-            async with BoardRunner(board) as runner:
+            async with open_runner(board) as runner:
                 result = await runner.run(str(args["command"]), timeout_s=timeout_s)
         except DeepgentError as exc:
             return _err(str(exc))
@@ -155,17 +154,11 @@ def build_board_farm_tools(holder: str | None = None) -> list[SdkMcpTool[Any]]:
         try:
             board = get_board(str(args["board"]))
             require_lease(board.id, holder_id)
-            async with BoardRunner(board) as runner:
-                raw = await runner.capture_tegrastats(duration_s)
+            async with open_runner(board) as runner:
+                metrics = await runner.capture_metrics(duration_s, interval_ms=500)
         except DeepgentError as exc:
             return _err(str(exc))
-        capture = parse_capture(raw)
-        return _ok(
-            {
-                "metrics": capture.summary_metrics(interval_ms=500),
-                "raw_lines": len(raw.splitlines()),
-            }
-        )
+        return _ok({"metrics": metrics})
 
     @tool(
         "power",

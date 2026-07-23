@@ -19,7 +19,7 @@ from pathlib import Path
 
 import structlog
 
-from deepgent.boards import BoardRunner, get_board, parse_capture
+from deepgent.boards import BoardRunner, LocalRunner, get_board, open_runner
 from deepgent.errors import BoardError
 
 _logger = structlog.get_logger(__name__)
@@ -197,10 +197,14 @@ class SoakRunner:
         self._rules = rules if rules is not None else AnomalyRules()
         self._window_s = window_s
 
-    async def _snapshot(self, runner: BoardRunner, window_raw: str, label: str) -> None:
+    async def _snapshot(
+        self, runner: "BoardRunner | LocalRunner", window_metrics: dict[str, float], label: str
+    ) -> None:
         """Persist the anomaly evidence; failures to snapshot never mask the
         anomaly itself."""
-        (self._run_dir / f"{label}-tegrastats.txt").write_text(window_raw)
+        import json as _json
+
+        (self._run_dir / f"{label}-metrics.json").write_text(_json.dumps(window_metrics, indent=2))
         try:
             dmesg = await runner.run(
                 f"dmesg --time-format iso 2>/dev/null | tail -n {_DMESG_TAIL_LINES} "
@@ -213,12 +217,13 @@ class SoakRunner:
 
     async def run(self, phases: list[SoakPhase]) -> SoakResult:
         board = get_board(self._board_id)
+        _ = board
         planned_s = sum(phase.duration_s for phase in phases)
         result = SoakResult(board=self._board_id, started_ts=time.time(), planned_s=planned_s)
         log = _logger.bind(board=self._board_id, planned_s=planned_s)
         log.info("soak_started", phases=len(phases))
 
-        async with BoardRunner(board) as runner:
+        async with open_runner(board) as runner:
             for phase in phases:
                 log.info("soak_phase", phase=phase.name, duration_s=phase.duration_s)
                 workload_task: asyncio.Task[object] | None = None
@@ -229,10 +234,7 @@ class SoakRunner:
                 phase_end = time.time() + phase.duration_s
                 while time.time() < phase_end:
                     window = min(self._window_s, max(phase_end - time.time(), 1.0))
-                    raw = await runner.capture_tegrastats(window, _TEGRASTATS_INTERVAL_MS)
-                    metrics = parse_capture(raw).summary_metrics(
-                        interval_ms=_TEGRASTATS_INTERVAL_MS
-                    )
+                    metrics = await runner.capture_metrics(window, _TEGRASTATS_INTERVAL_MS)
                     result.windows += 1
                     result.survived_s = time.time() - result.started_ts
                     tj = metrics.get("tj_max_c")
@@ -249,7 +251,7 @@ class SoakRunner:
                     if anomaly is not None:
                         result.anomaly = anomaly
                         log.warning("soak_anomaly", rule=anomaly.rule, detail=anomaly.detail)
-                        await self._snapshot(runner, raw, "anomaly")
+                        await self._snapshot(runner, metrics, "anomaly")
                         if workload_task is not None:
                             workload_task.cancel()
                         self._persist(result)
@@ -272,7 +274,7 @@ class SoakRunner:
                             rule="workload_failed",
                             detail=f"workload exited {exit_status}: {stderr[-500:]}",
                         )
-                        await self._snapshot(runner, "", "anomaly")
+                        await self._snapshot(runner, {}, "anomaly")
                         self._persist(result)
                         return result
                 result.phases_completed.append(phase.name)

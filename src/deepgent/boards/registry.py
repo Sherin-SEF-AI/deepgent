@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import tomli_w
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from deepgent.errors import BoardError
 
@@ -17,20 +17,32 @@ REGISTRY_RELPATH = Path(".deepgent") / "boards.toml"
 
 
 class BoardConfig(BaseModel):
-    """One registered target board."""
+    """One registered target: an SSH-attached board or the local host."""
 
     id: str
-    host: str
-    ssh_user: str
-    key_path: Path
     type: str
+    transport: Literal["ssh", "local"] = "ssh"
+    host: str | None = None
+    ssh_user: str | None = None
+    key_path: Path | None = None
+    device_class: str | None = None
     l4t: str | None = None
     os: str | None = None
     capabilities: list[str] = Field(default_factory=list)
     power_ctl: Literal["none", "smartplug", "pdu"] = "none"
 
+    @model_validator(mode="after")
+    def _check_transport(self) -> "BoardConfig":
+        if self.transport == "ssh" and not (self.host and self.ssh_user and self.key_path):
+            raise ValueError(
+                f"board '{self.id}' uses ssh transport but is missing host, ssh_user, or key_path"
+            )
+        return self
+
     @property
     def expanded_key_path(self) -> Path:
+        if self.key_path is None:
+            raise BoardError(f"board '{self.id}' has no ssh key (transport={self.transport})")
         return self.key_path.expanduser()
 
 
@@ -96,3 +108,21 @@ def remove_board(board_id: str) -> None:
         raise BoardError(f"board '{board_id}' is not registered")
     del boards[board_id]
     _save_registry(boards)
+
+
+def register_local_target(
+    device_class: str, capabilities: list[str], os_name: str | None = None
+) -> BoardConfig:
+    """Register (or refresh) the local host as a 'local' target."""
+    board = BoardConfig(
+        id="local",
+        type=device_class,
+        transport="local",
+        device_class=device_class,
+        os=os_name,
+        capabilities=capabilities,
+    )
+    boards = load_registry()
+    boards["local"] = board
+    _save_registry(boards)
+    return board

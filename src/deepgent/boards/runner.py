@@ -148,3 +148,20 @@ class BoardRunner:
                 f"(exit {result.exit_status}): {result.stderr.strip()}"
             )
         return result.stdout
+
+    async def capture_metrics(self, duration_s: float, interval_ms: int = 500) -> dict[str, float]:
+        """Summary metrics from an on-board tegrastats capture.
+
+        The universal counterpart to LocalRunner.capture_metrics so soak,
+        differential, and the farm score the same shape regardless of
+        transport. A board without tegrastats yields an empty summary rather
+        than raising, so non-Jetson SSH targets still run.
+        """
+        from deepgent.boards.tegrastats import parse_capture
+
+        try:
+            raw = await self.capture_tegrastats(duration_s, interval_ms)
+        except BoardError:
+            _logger.warning("capture_metrics_unavailable", board=self._board.id)
+            return {"samples": 0.0}
+        return parse_capture(raw).summary_metrics(interval_ms=interval_ms)

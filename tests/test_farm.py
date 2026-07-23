@@ -67,15 +67,17 @@ class FakeRunner:
     async def put(self, local: Path, remote: str) -> None:
         FakeRunner.calls.append(("put", (str(local), remote)))
 
-    async def capture_tegrastats(self, duration_s: float, interval_ms: int = 500) -> str:
-        FakeRunner.calls.append(("tegrastats", duration_s))
-        return _TEGRASTATS_LINE * 6
+    async def capture_metrics(self, duration_s: float, interval_ms: int = 500) -> dict[str, float]:
+        FakeRunner.calls.append(("metrics", duration_s))
+        from deepgent.boards import parse_capture
+
+        return parse_capture(_TEGRASTATS_LINE * 6).summary_metrics(interval_ms=interval_ms)
 
 
 @pytest.fixture
 def tools(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     FakeRunner.calls = []
-    monkeypatch.setattr(farm_module, "BoardRunner", FakeRunner)
+    monkeypatch.setattr(farm_module, "open_runner", lambda board: FakeRunner(board))
     return {t.name: t for t in build_board_farm_tools(holder="holder-test")}
 
 
