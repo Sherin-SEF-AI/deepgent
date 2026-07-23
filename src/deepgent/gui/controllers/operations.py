@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from deepgent.evals.model_selector import Constraint, SelectionResult
     from deepgent.evals.nsight import NsightResult
     from deepgent.evals.quant_sweep import QuantSweepResult
+    from deepgent.evals.shadow import ShadowDiff
 
 from deepgent.config import load_settings
 from deepgent.containers import ContainerBuilder, load_jp6_spec
@@ -76,6 +77,24 @@ class EvalsController:
     ) -> DifferentialResult:
         root = project_root if project_root is not None else Path.cwd()
         return await DifferentialRunner(root).run(artifact, board_ids, command)
+
+    async def shadow(
+        self,
+        board: str,
+        fixture: str,
+        incumbent: str,
+        candidate: str,
+        remote_path: str,
+        kind: str = "detection",
+        project_root: Path | None = None,
+    ) -> "ShadowDiff":
+        from deepgent.evals.shadow import ShadowRunner
+
+        root = project_root if project_root is not None else Path.cwd()
+        run_dir = create_run_dir(f"shadow-{board}", root)
+        return await ShadowRunner(board, root).run(
+            fixture, incumbent, candidate, remote_path, run_dir, kind
+        )
 
 
 class KnowledgeController:

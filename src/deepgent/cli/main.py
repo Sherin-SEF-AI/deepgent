@@ -677,6 +677,37 @@ def profile_nsight(
     typer.echo(f"artifacts: {run_dir}")
 
 
+@app.command("shadow")
+def shadow_cmd(
+    board: str = typer.Option(..., "--board", help="Registered board id."),
+    fixture: str = typer.Option(..., "--fixture", help="Recorded fixture name to replay."),
+    incumbent: str = typer.Option(..., "--incumbent", help="Incumbent consumer command."),
+    candidate: str = typer.Option(..., "--candidate", help="Candidate consumer command."),
+    remote_path: str = typer.Option(
+        "/tmp/deepgent-shadow/stream.bin", "--remote-path", help="Where to stage the fixture."
+    ),
+    kind: str = typer.Option("detection", "--kind", help="detection or classification."),
+    iou: float = typer.Option(0.5, "--iou", help="IoU threshold for detection matching."),
+    debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
+) -> None:
+    """Replay a fixture through two models and diff their behavior (#9)."""
+    from deepgent.evals import create_run_dir
+    from deepgent.evals.shadow import ShadowRunner
+
+    _configure_logging(debug)
+    try:
+        run_dir = create_run_dir(f"shadow-{board}", Path.cwd())
+        runner = ShadowRunner(board, Path.cwd())
+        diff = asyncio.run(
+            runner.run(fixture, incumbent, candidate, remote_path, run_dir, kind, iou)
+        )
+    except DeepgentError as exc:
+        _fail(str(exc), debug=debug, exc=exc)
+        return
+    typer.echo(diff.render())
+    typer.echo(f"artifacts: {run_dir}")
+
+
 @app.command("cuda-check")
 def cuda_check_cmd(
     board: str = typer.Option(..., "--board", help="Registered GPU board id."),
