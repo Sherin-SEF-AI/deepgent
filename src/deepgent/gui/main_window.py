@@ -21,6 +21,7 @@ from deepgent.gui.panels.dashboard import DashboardPanel
 from deepgent.gui.panels.differential import DifferentialPanel
 from deepgent.gui.panels.evals import EvalsPanel
 from deepgent.gui.panels.knowledge import KnowledgePanel
+from deepgent.gui.panels.models import ModelsPanel
 from deepgent.gui.panels.profiling import ProfilingPanel
 from deepgent.gui.panels.run_task import RunTaskPanel
 from deepgent.gui.panels.skills import SkillsPanel
@@ -34,6 +35,7 @@ _SURFACES: list[tuple[str, Callable[[], QWidget]]] = [
     ("Evals & Soak", EvalsPanel),
     ("Differential", DifferentialPanel),
     ("Profiling", ProfilingPanel),
+    ("Models", ModelsPanel),
     ("Containers", ContainersPanel),
     ("Knowledge", KnowledgePanel),
     ("Skills", SkillsPanel),

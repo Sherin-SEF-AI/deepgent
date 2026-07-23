@@ -66,6 +66,8 @@ rag_app = typer.Typer(help="Datasheet RAG operations (owner/server mode).")
 app.add_typer(rag_app, name="rag")
 profile_app = typer.Typer(help="On-target performance and latency profiling.")
 app.add_typer(profile_app, name="profile")
+accuracy_app = typer.Typer(help="Closed-loop accuracy validation and scoring.")
+app.add_typer(accuracy_app, name="accuracy")
 
 _PROJECT_MD = """\
 # deepgent project state
@@ -512,6 +514,144 @@ def profile_latency(
     typer.echo(trace.render_report())
     typer.echo(f"artifacts: {run_dir}")
     if trace.passed is False:
+        raise typer.Exit(code=1)
+
+
+@app.command("quant-sweep")
+def quant_sweep_cmd(
+    board: str = typer.Option(..., "--board", help="Registered board id."),
+    command: str = typer.Option(
+        ...,
+        "--command",
+        help="Build+benchmark template with {precision} {batch} {device} fields.",
+    ),
+    precisions: str = typer.Option("fp16,int8", "--precisions", help="Comma-separated precisions."),
+    batches: str = typer.Option("1,2", "--batches", help="Comma-separated batch sizes."),
+    devices: str = typer.Option("gpu", "--devices", help="Comma-separated device placements."),
+    accuracy_metric: str | None = typer.Option(
+        None, "--accuracy-metric", help="METRIC name to read as accuracy (e.g. mAP)."
+    ),
+    capture: float = typer.Option(30.0, "--capture", min=1.0, help="Capture seconds per config."),
+    debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
+) -> None:
+    """Sweep precision/batch/device to an on-target Pareto frontier (#1)."""
+    from deepgent.evals import create_run_dir, expand_grid, select_best
+    from deepgent.evals.quant_sweep import QuantSweepRunner
+
+    _configure_logging(debug)
+    try:
+        configs = expand_grid(
+            [p.strip() for p in precisions.split(",") if p.strip()],
+            [int(b) for b in batches.split(",") if b.strip()],
+            [d.strip() for d in devices.split(",") if d.strip()],
+        )
+        run_dir = create_run_dir(f"quant-{board}", Path.cwd())
+        runner = QuantSweepRunner(board, run_dir)
+        result = asyncio.run(runner.run(command, configs, capture, accuracy_metric))
+    except (DeepgentError, ValueError) as exc:
+        _fail(str(exc), debug=debug, exc=exc if isinstance(exc, DeepgentError) else None)
+        return
+    typer.echo(result.render_table())
+    best = select_best(result.frontier)
+    typer.echo(f"best (min latency on frontier): {best.config.label if best else 'none'}")
+    typer.echo(f"artifacts: {run_dir}")
+
+
+@accuracy_app.command("gate")
+def accuracy_gate_cmd(
+    board: str = typer.Option(..., "--board", help="Registered board id."),
+    command: str = typer.Option(..., "--command", help="On-device eval; prints METRIC <name> <v>."),
+    metric: str = typer.Option("mAP", "--metric", help="Metric name to gate on."),
+    baseline: str | None = typer.Option(
+        None, "--baseline", help="Baseline value, or a JSON file keyed by metric."
+    ),
+    tolerance: float = typer.Option(0.0, "--tolerance", help="Allowed regression below baseline."),
+    capture: float = typer.Option(120.0, "--capture", min=1.0, help="Capture seconds."),
+    debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
+) -> None:
+    """Run an on-device eval and gate the metric against a baseline (#2)."""
+    from deepgent.evals import create_run_dir
+    from deepgent.evals.accuracy import AccuracyGate, load_baseline
+
+    _configure_logging(debug)
+    try:
+        base = load_baseline(baseline, metric)
+        result = asyncio.run(AccuracyGate().run(board, command, metric, base, tolerance, capture))
+        run_dir = create_run_dir(f"accuracy-{board}", Path.cwd())
+        (run_dir / "accuracy.txt").write_text(result.render())
+    except DeepgentError as exc:
+        _fail(str(exc), debug=debug, exc=exc)
+        return
+    typer.echo(result.render())
+    typer.echo(f"artifacts: {run_dir}")
+    if not result.passed:
+        raise typer.Exit(code=1)
+
+
+@accuracy_app.command("score")
+def accuracy_score_cmd(
+    predictions: Path = typer.Option(..., "--predictions", help="Predictions JSON file."),
+    truth: Path = typer.Option(..., "--truth", help="Ground-truth JSON file."),
+    kind: str = typer.Option("detection", "--kind", help="detection or classification."),
+    iou: float = typer.Option(0.5, "--iou", help="IoU threshold for detection mAP."),
+    debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
+) -> None:
+    """Score local predictions against ground truth (mAP or top-1) (#2)."""
+    from deepgent.evals.accuracy import score_classification_files, score_detection_files
+
+    _configure_logging(debug)
+    try:
+        if kind == "detection":
+            value = score_detection_files(predictions, truth, iou)
+            label = f"mAP@{iou:g}"
+        elif kind == "classification":
+            value = score_classification_files(predictions, truth)
+            label = "top-1"
+        else:
+            _fail(f"unknown kind '{kind}'; use detection or classification", debug=debug)
+            return
+    except (DeepgentError, OSError, ValueError, KeyError) as exc:
+        _fail(str(exc), debug=debug, exc=exc if isinstance(exc, DeepgentError) else None)
+        return
+    typer.echo(f"{label}: {value:.4f}")
+
+
+@app.command("select-model")
+def select_model_cmd(
+    board: str = typer.Option(..., "--board", help="Registered board id."),
+    manifest: Path = typer.Option(..., "--manifest", help="JSON array of {name, command}."),
+    max_power: float | None = typer.Option(None, "--max-power", help="Max mean power in W."),
+    min_fps: float | None = typer.Option(None, "--min-fps", help="Min throughput in fps."),
+    max_latency: float | None = typer.Option(None, "--max-latency", help="Max latency in ms."),
+    min_accuracy: float | None = typer.Option(None, "--min-accuracy", help="Min accuracy."),
+    accuracy_metric: str | None = typer.Option(
+        None, "--accuracy-metric", help="METRIC name to read as accuracy."
+    ),
+    capture: float = typer.Option(30.0, "--capture", min=1.0, help="Capture seconds per model."),
+    debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
+) -> None:
+    """Benchmark candidate models and return those meeting a power/fps budget (#6)."""
+    from deepgent.evals import create_run_dir
+    from deepgent.evals.model_selector import Constraint, ModelSelector, load_candidates
+
+    _configure_logging(debug)
+    try:
+        candidates = load_candidates(manifest)
+        constraint = Constraint(
+            max_power_w=max_power,
+            min_fps=min_fps,
+            max_latency_ms=max_latency,
+            min_accuracy=min_accuracy,
+        )
+        run_dir = create_run_dir(f"select-{board}", Path.cwd())
+        selector = ModelSelector(board, run_dir)
+        result = asyncio.run(selector.run(candidates, constraint, capture, accuracy_metric))
+    except DeepgentError as exc:
+        _fail(str(exc), debug=debug, exc=exc)
+        return
+    typer.echo(result.render_table())
+    typer.echo(f"artifacts: {run_dir}")
+    if result.winner is None:
         raise typer.Exit(code=1)
 
 

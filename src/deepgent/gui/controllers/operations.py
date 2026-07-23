@@ -8,7 +8,12 @@ board and network work runs directly on the loop.
 
 import asyncio
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from deepgent.evals.accuracy import AccuracyResult
+    from deepgent.evals.model_selector import Constraint, SelectionResult
+    from deepgent.evals.quant_sweep import QuantSweepResult
 
 from deepgent.config import load_settings
 from deepgent.containers import ContainerBuilder, load_jp6_spec
@@ -111,6 +116,61 @@ class ProfilingController:
         run_dir = create_run_dir(f"latency-{board}", root)
         tracer = LatencyTracer(board, run_dir)
         return await tracer.run(command, budget_ms=budget_ms, capture_s=capture_s)
+
+
+class ModelsController:
+    """Quantization sweep (#1), accuracy gate (#2), model selection (#6)."""
+
+    async def quant_sweep(
+        self,
+        board: str,
+        command: str,
+        precisions: list[str],
+        batches: list[int],
+        devices: list[str],
+        accuracy_metric: str | None = None,
+        capture_s: float = 30.0,
+        project_root: Path | None = None,
+    ) -> "QuantSweepResult":
+        from deepgent.evals.quant_sweep import QuantSweepRunner, expand_grid
+
+        root = project_root if project_root is not None else Path.cwd()
+        configs = expand_grid(precisions, batches, devices)
+        run_dir = create_run_dir(f"quant-{board}", root)
+        return await QuantSweepRunner(board, run_dir).run(
+            command, configs, capture_s, accuracy_metric
+        )
+
+    async def accuracy_gate(
+        self,
+        board: str,
+        command: str,
+        metric: str,
+        baseline: float | None,
+        tolerance: float = 0.0,
+        capture_s: float = 120.0,
+    ) -> "AccuracyResult":
+        from deepgent.evals.accuracy import AccuracyGate
+
+        return await AccuracyGate().run(board, command, metric, baseline, tolerance, capture_s)
+
+    async def select_model(
+        self,
+        board: str,
+        manifest: Path,
+        constraint: "Constraint",
+        accuracy_metric: str | None = None,
+        capture_s: float = 30.0,
+        project_root: Path | None = None,
+    ) -> "SelectionResult":
+        from deepgent.evals.model_selector import ModelSelector, load_candidates
+
+        root = project_root if project_root is not None else Path.cwd()
+        candidates = load_candidates(manifest)
+        run_dir = create_run_dir(f"select-{board}", root)
+        return await ModelSelector(board, run_dir).run(
+            candidates, constraint, capture_s, accuracy_metric
+        )
 
 
 class SkillsController:
