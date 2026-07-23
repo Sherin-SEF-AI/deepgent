@@ -64,6 +64,8 @@ skills_app = typer.Typer(help="Inspect local skill packs.")
 app.add_typer(skills_app, name="skills")
 rag_app = typer.Typer(help="Datasheet RAG operations (owner/server mode).")
 app.add_typer(rag_app, name="rag")
+profile_app = typer.Typer(help="On-target performance and latency profiling.")
+app.add_typer(profile_app, name="profile")
 
 _PROJECT_MD = """\
 # deepgent project state
@@ -454,6 +456,63 @@ def soak_run(
     typer.echo(result.render_report())
     typer.echo(f"artifacts: {run_dir}")
     raise typer.Exit(code=0 if result.survived else 1)
+
+
+@profile_app.command("thermal")
+def profile_thermal(
+    board: str = typer.Option(..., "--board", help="Registered board id."),
+    workload: str = typer.Option(..., "--workload", help="Sustained benchmark command."),
+    hold: float = typer.Option(300.0, "--hold", min=1.0, help="Seconds to hold per mode."),
+    modes: str | None = typer.Option(
+        None, "--modes", help="Power modes '0:MAXN,1:30W'; omit to profile the current mode."
+    ),
+    tj_max: float = typer.Option(95.0, "--tj-max", help="Thermal ceiling in C for knee detection."),
+    window: float = typer.Option(30.0, "--window", min=0.1, help="Sampling window seconds."),
+    debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
+) -> None:
+    """Sustained thermal/DVFS envelope: burst vs sustained fps, thermal knee (#3)."""
+    from deepgent.evals import create_run_dir, parse_modes
+    from deepgent.evals.thermal_envelope import ThermalEnvelopeProfiler
+
+    _configure_logging(debug)
+    try:
+        mode_list = parse_modes(modes) if modes else None
+        run_dir = create_run_dir(f"thermal-{board}", Path.cwd())
+        profiler = ThermalEnvelopeProfiler(board, run_dir, window_s=window)
+        result = asyncio.run(profiler.run(workload, hold, mode_list, tj_ceiling_c=tj_max))
+    except DeepgentError as exc:
+        _fail(str(exc), debug=debug, exc=exc)
+        return
+    typer.echo(result.render_table())
+    typer.echo(f"artifacts: {run_dir}")
+
+
+@profile_app.command("latency")
+def profile_latency(
+    board: str = typer.Option(..., "--board", help="Registered board id."),
+    command: str = typer.Option(..., "--command", help="Instrumented pipeline command."),
+    budget_ms: float | None = typer.Option(
+        None, "--budget-ms", help="Glass-to-glass p99 budget; exit nonzero if exceeded."
+    ),
+    capture: float = typer.Option(30.0, "--capture", min=1.0, help="Capture seconds."),
+    debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
+) -> None:
+    """Glass-to-glass per-stage latency trace with a p99 budget gate (#4)."""
+    from deepgent.evals import create_run_dir
+    from deepgent.evals.latency_trace import LatencyTracer
+
+    _configure_logging(debug)
+    try:
+        run_dir = create_run_dir(f"latency-{board}", Path.cwd())
+        tracer = LatencyTracer(board, run_dir)
+        trace = asyncio.run(tracer.run(command, budget_ms=budget_ms, capture_s=capture))
+    except DeepgentError as exc:
+        _fail(str(exc), debug=debug, exc=exc)
+        return
+    typer.echo(trace.render_report())
+    typer.echo(f"artifacts: {run_dir}")
+    if trace.passed is False:
+        raise typer.Exit(code=1)
 
 
 @app.command("ci")

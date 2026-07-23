@@ -12,9 +12,15 @@ from typing import Any
 
 from deepgent.config import load_settings
 from deepgent.containers import ContainerBuilder, load_jp6_spec
-from deepgent.evals import GoldenRunResult, run_golden
+from deepgent.evals import GoldenRunResult, create_run_dir, run_golden
 from deepgent.evals.differential import DifferentialResult, DifferentialRunner
+from deepgent.evals.latency_trace import LatencyTrace, LatencyTracer
 from deepgent.evals.soak import AnomalyRules, SoakResult, SoakRunner, default_phases
+from deepgent.evals.thermal_envelope import (
+    ThermalEnvelopeProfiler,
+    ThermalEnvelopeResult,
+    parse_modes,
+)
 from deepgent.knowledge import SkillPack, build_rag_client, list_skills, triage
 from deepgent.knowledge.products import TriageResult
 
@@ -72,6 +78,39 @@ class KnowledgeController:
             return await triage(client, symptom, hw=hw)
         finally:
             await client.aclose()
+
+
+class ProfilingController:
+    """Thermal-envelope (#3) and glass-to-glass latency (#4) profiling."""
+
+    async def thermal(
+        self,
+        board: str,
+        workload: str,
+        hold_s: float,
+        modes: str | None,
+        tj_max: float,
+        window_s: float,
+        project_root: Path | None = None,
+    ) -> ThermalEnvelopeResult:
+        root = project_root if project_root is not None else Path.cwd()
+        mode_list = parse_modes(modes) if modes else None
+        run_dir = create_run_dir(f"thermal-{board}", root)
+        profiler = ThermalEnvelopeProfiler(board, run_dir, window_s=window_s)
+        return await profiler.run(workload, hold_s, mode_list, tj_ceiling_c=tj_max)
+
+    async def latency(
+        self,
+        board: str,
+        command: str,
+        budget_ms: float | None,
+        capture_s: float,
+        project_root: Path | None = None,
+    ) -> LatencyTrace:
+        root = project_root if project_root is not None else Path.cwd()
+        run_dir = create_run_dir(f"latency-{board}", root)
+        tracer = LatencyTracer(board, run_dir)
+        return await tracer.run(command, budget_ms=budget_ms, capture_s=capture_s)
 
 
 class SkillsController:

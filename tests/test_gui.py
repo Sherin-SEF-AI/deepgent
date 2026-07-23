@@ -122,6 +122,7 @@ def test_every_panel_constructs(qapp: QApplication, tmp_path: Path) -> None:
     from deepgent.gui.panels.differential import DifferentialPanel
     from deepgent.gui.panels.evals import EvalsPanel
     from deepgent.gui.panels.knowledge import KnowledgePanel
+    from deepgent.gui.panels.profiling import ProfilingPanel
     from deepgent.gui.panels.run_task import RunTaskPanel
     from deepgent.gui.panels.skills import SkillsPanel
     from deepgent.gui.panels.telemetry import TelemetryPanel
@@ -135,6 +136,7 @@ def test_every_panel_constructs(qapp: QApplication, tmp_path: Path) -> None:
             BoardsPanel(),
             EvalsPanel(),
             DifferentialPanel(),
+            ProfilingPanel(),
             ContainersPanel(),
             KnowledgePanel(),
             SkillsPanel(),
