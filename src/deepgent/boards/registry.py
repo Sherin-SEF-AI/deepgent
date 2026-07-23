@@ -71,13 +71,16 @@ def load_registry() -> dict[str, BoardConfig]:
 
 def _save_registry(boards: dict[str, BoardConfig]) -> None:
     path = registry_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
     tables: dict[str, dict[str, Any]] = {}
     for board_id, board in sorted(boards.items()):
         table = board.model_dump(mode="json", exclude={"id"}, exclude_none=True)
         tables[board_id] = table
-    with path.open("wb") as f:
-        tomli_w.dump({"boards": tables}, f)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("wb") as f:
+            tomli_w.dump({"boards": tables}, f)
+    except OSError as exc:
+        raise BoardError(f"cannot write board registry {path}: {exc}") from exc
 
 
 def get_board(board_id: str) -> BoardConfig:

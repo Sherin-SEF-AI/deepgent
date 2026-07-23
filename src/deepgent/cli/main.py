@@ -96,8 +96,15 @@ per_task_usd = 2.00
 """
 
 
-def _configure_logging(debug: bool) -> None:
-    level = logging.DEBUG if debug else logging.INFO
+def _configure_logging(debug: bool, quiet: bool = False) -> None:
+    if debug:
+        level = logging.DEBUG
+    elif quiet:
+        # Machine-readable output paths keep the stream clean: only WARNING+
+        # diagnostics, never routine INFO events.
+        level = logging.WARNING
+    else:
+        level = logging.INFO
     structlog.configure(
         wrapper_class=structlog.make_filtering_bound_logger(level),
         logger_factory=structlog.PrintLoggerFactory(sys.stderr),
@@ -746,34 +753,116 @@ def skills_list(
         typer.echo(f"{pack.name}  {pack.description}")
 
 
+_HOST_CLASS_ENV = "DEEPGENT_HOST__DEVICE_CLASS"
+_HOST_TOOLCHAIN_ENV = "DEEPGENT_HOST__TOOLCHAIN"
+
+
 @app.command()
 def setup(
-    force: bool = typer.Option(False, "--force", help="Overwrite an existing [host] config block."),
+    force: bool = typer.Option(
+        False, "--force", help="Overwrite an existing (unpinned) [host] config block."
+    ),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Detect and render only; write nothing."),
+    json_out: bool = typer.Option(
+        False, "--json", help="Emit the profile and derived config as JSON."
+    ),
+    config_path: Path | None = typer.Option(
+        None, "--config", help="Config file to write (default ~/.deepgent/config.toml)."
+    ),
     debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
 ) -> None:
     """Detect this system's specs and auto-configure deepgent for it."""
+    import json as json_module
+
     from deepgent.boards import register_local_target
     from deepgent.host import apply_config, derive_config, detect_host
+    from deepgent.host.autoconfig import pin_host_override
 
-    _configure_logging(debug)
+    _configure_logging(debug, quiet=json_out)
     profile = detect_host()
-    typer.echo(profile.render())
     config = derive_config(profile)
+
+    if json_out:
+        typer.echo(
+            json_module.dumps(
+                {"profile": profile.to_dict(), "config": config.to_table()},
+                indent=2,
+                default=str,
+            )
+        )
+    else:
+        typer.echo(profile.render())
+
+    if dry_run:
+        if not json_out:
+            typer.secho("dry run: nothing written", fg=typer.colors.YELLOW)
+        return
+
+    resolved_config = (
+        config_path if config_path is not None else Path.home() / ".deepgent" / "config.toml"
+    )
     try:
-        path = apply_config(profile, force=force)
-        if config.local_execution:
-            register_local_target(profile.device_class, list(config.capabilities), profile.os)
+        # Operator env overrides (item 18/28): a valid class/toolchain pins
+        # the [host] block so detection never overwrites it; an invalid one
+        # is a hard, actionable error.
+        env_class = os.environ.get(_HOST_CLASS_ENV)
+        env_toolchain = os.environ.get(_HOST_TOOLCHAIN_ENV)
+        if env_class or env_toolchain:
+            pin_host_override(resolved_config, device_class=env_class, toolchain=env_toolchain)
+            typer.secho(
+                f"pinned host override from environment: "
+                f"device_class={env_class or '-'}, toolchain={env_toolchain or '-'}",
+                fg=typer.colors.YELLOW,
+            )
+
+        path, written = apply_config(profile, config_path=resolved_config, force=force)
     except DeepgentError as exc:
         _fail(str(exc), debug=debug, exc=exc)
         return
-    typer.secho(
-        f"configured: device_class={config.device_class}, toolchain={config.toolchain}, "
-        f"local_execution={config.local_execution}",
-        fg=typer.colors.GREEN,
-    )
-    typer.echo(f"wrote {path}")
+
+    if not json_out:
+        typer.secho(
+            f"configured: device_class={config.device_class}, toolchain={config.toolchain}, "
+            f"local_execution={config.local_execution}",
+            fg=typer.colors.GREEN,
+        )
+        if written:
+            typer.echo(f"wrote {path}")
+        else:
+            typer.secho(
+                f"host config already present at {path} (device_class="
+                f"{config.device_class}); pass --force to refresh",
+                fg=typer.colors.YELLOW,
+            )
+
+    # Registering the local target is a separate step: if it fails, the
+    # config write above already succeeded and was reported (item 26).
     if config.local_execution:
-        typer.echo("registered target 'local' (run tasks on this machine directly)")
+        try:
+            register_local_target(profile.device_class, list(config.capabilities), profile.os)
+        except DeepgentError as exc:
+            _fail(f"cannot register local target: {exc}", debug=debug, exc=exc)
+            return
+        if not json_out:
+            typer.echo("registered target 'local' (run tasks on this machine directly)")
+
+
+@app.command("host")
+def host_show(
+    json_out: bool = typer.Option(False, "--json", help="Emit the profile as JSON."),
+    debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
+) -> None:
+    """Show the detected host profile without touching config."""
+    import json as json_module
+
+    from deepgent.host import detect_host
+
+    _configure_logging(debug, quiet=json_out)
+    profile = detect_host()
+    if json_out:
+        typer.echo(json_module.dumps(profile.to_dict(), indent=2, default=str))
+    else:
+        typer.echo(profile.render())
 
 
 @app.command()
@@ -841,16 +930,23 @@ def report(
 
 @app.command()
 def doctor(
+    json_out: bool = typer.Option(False, "--json", help="Emit checks as JSON."),
     debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks on check failures."),
 ) -> None:
     """Check that the environment can run deepgent tasks."""
-    _configure_logging(debug)
+    import json as json_module
+
+    _configure_logging(debug, quiet=json_out)
     failures = 0
+    checks: list[dict[str, object]] = []
 
     def report(name: str, ok: bool, detail: str) -> None:
         nonlocal failures
         if not ok:
             failures += 1
+        checks.append({"name": name, "ok": ok, "detail": detail})
+        if json_out:
+            return
         mark = (
             typer.style("ok  ", fg=typer.colors.GREEN)
             if ok
@@ -923,6 +1019,12 @@ def doctor(
         if has_key
         else "ANTHROPIC_API_KEY is not set; export it or configure the OS keyring",
     )
+
+    if json_out:
+        typer.echo(json_module.dumps({"ok": failures == 0, "failures": failures, "checks": checks}))
+        if failures:
+            raise typer.Exit(code=1)
+        return
 
     if failures:
         typer.secho(f"{failures} check(s) failed", err=True, fg=typer.colors.RED)

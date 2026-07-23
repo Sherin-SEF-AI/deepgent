@@ -2,10 +2,14 @@
 
 Maps a HostProfile to a recommended runtime configuration: which toolchain
 applies, whether the local machine can execute tasks directly, and the
-default target. Writing is idempotent and never clobbers operator settings
-already present in the config file.
+default target. Config writes are atomic (temp file + os.replace) so a
+concurrent setup or a crash never leaves a half-written config. Operator
+settings already present are preserved; an operator-pinned [host] value is
+never overwritten by detection.
 """
 
+import os
+import tempfile
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,20 +18,26 @@ from typing import Any
 import structlog
 import tomli_w
 
-from deepgent.host.detect import HostProfile
+from deepgent.errors import ConfigError
+from deepgent.host.detect import (
+    DETECTOR_VERSION,
+    HostProfile,
+    is_valid_device_class,
+)
 
 _logger = structlog.get_logger(__name__)
 
 USER_CONFIG_RELPATH = Path(".deepgent") / "config.toml"
 
-# device class -> the toolchain that produces artifacts for it. "native"
-# means build and run on this host directly; a container name means a
-# version-pinned cross-toolchain applies.
+# device class -> toolchain. "native" means build and run on this host
+# directly; a container name means a version-pinned cross-toolchain applies.
 _TOOLCHAIN_BY_CLASS = {
     "jetson": "jp6",
     "raspberry-pi": "native",
     "linux-desktop": "native",
     "linux-server": "native",
+    "wsl": "native",
+    "container": "native",
     "macos": "native",
     "windows": "native",
     "unknown": "native",
@@ -56,7 +66,7 @@ class HostConfig:
 
 def _capabilities(profile: HostProfile) -> tuple[str, ...]:
     caps: list[str] = []
-    if profile.accelerator in ("tegra", "cuda-discrete"):
+    if profile.accelerator in ("tegra", "cuda-discrete", "multi-gpu"):
         caps.append("cuda")
     if profile.accelerator == "hailo":
         caps.append("hailo")
@@ -72,10 +82,9 @@ def _capabilities(profile: HostProfile) -> tuple[str, ...]:
 def derive_config(profile: HostProfile) -> HostConfig:
     """Recommended configuration for a detected host."""
     toolchain = _TOOLCHAIN_BY_CLASS.get(profile.device_class, "native")
-    # A host runs tasks locally when it is not a remote-only cross target.
-    # Jetson boards are targeted over SSH in the farm, but a Jetson can also
-    # run deepgent itself; local_execution reflects "this machine can build
-    # and run its own artifacts".
+    # local_execution reflects "this machine can build and run its own
+    # artifacts". Every Unix-like host qualifies; Windows is targeted, not a
+    # local executor, until first-class Windows support lands.
     local_execution = profile.os in ("Linux", "Darwin")
     return HostConfig(
         device_class=profile.device_class,
@@ -89,40 +98,105 @@ def derive_config(profile: HostProfile) -> HostConfig:
 def _load_config(path: Path) -> dict[str, Any]:
     if not path.is_file():
         return {}
-    with path.open("rb") as f:
-        return tomllib.load(f)
+    try:
+        with path.open("rb") as f:
+            return tomllib.load(f)
+    except tomllib.TOMLDecodeError as exc:
+        raise ConfigError(
+            f"existing config {path} is not valid TOML: {exc}; fix it or pass "
+            "--force to replace the [host] block"
+        ) from exc
+    except OSError as exc:
+        raise ConfigError(f"cannot read config {path}: {exc}") from exc
+
+
+def _atomic_write(path: Path, data: dict[str, Any]) -> None:
+    """Write config atomically so a concurrent setup or crash never leaves a
+    partial file. Temp file is created in the same directory for a same-fs
+    rename."""
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=".config-", suffix=".toml")
+    except OSError as exc:
+        raise ConfigError(f"cannot write host config to {path}: {exc}") from exc
+    tmp = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "wb") as f:
+            tomli_w.dump(data, f)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    except OSError as exc:
+        tmp.unlink(missing_ok=True)
+        raise ConfigError(f"cannot write host config to {path}: {exc}") from exc
 
 
 def apply_config(
     profile: HostProfile, config_path: Path | None = None, force: bool = False
-) -> Path:
+) -> tuple[Path, bool]:
     """Write the detected host config into ~/.deepgent/config.toml.
 
-    The [host] block is refreshed from detection every run (it describes the
-    machine, not operator intent). Operator keys elsewhere (budget, boards,
-    knowledge) are preserved. A pre-existing [host] block is only overwritten
-    with force, so a manual override survives re-runs.
+    Returns (path, written). The [host] block is only written when absent or
+    force=True; an operator-pinned block (host.pinned = true) is never
+    overwritten. Operator keys elsewhere (budget, boards, knowledge) are
+    preserved. Raises ConfigError with an actionable message on corrupt or
+    unwritable config.
     """
     path = config_path if config_path is not None else Path.home() / USER_CONFIG_RELPATH
-    path.parent.mkdir(parents=True, exist_ok=True)
     existing = _load_config(path)
     host_config = derive_config(profile)
 
-    if "host" in existing and not force:
-        _logger.info("host_config_kept", path=str(path))
-        return path
+    existing_host = existing.get("host")
+    if isinstance(existing_host, dict):
+        if existing_host.get("pinned"):
+            _logger.info("host_config_pinned_kept", path=str(path))
+            return path, False
+        if not force:
+            _logger.info("host_config_kept", path=str(path))
+            return path, False
 
     existing["host"] = {
         **host_config.to_table(),
         "device_model": profile.device_model or "",
         "arch": profile.arch,
         "detected_os": f"{profile.os} {profile.os_version or ''}".strip(),
+        "detected_at": profile.detected_at,
+        "detector_version": DETECTOR_VERSION,
+        "pinned": False,
     }
-    # A sensible default board name for local execution, without clobbering an
-    # operator-set default_board.
     if host_config.local_execution and "default_board" not in existing:
         existing["default_board"] = "local"
-    with path.open("wb") as f:
-        tomli_w.dump(existing, f)
+
+    _atomic_write(path, existing)
     _logger.info("host_config_written", path=str(path), toolchain=host_config.toolchain)
-    return path
+    return path, True
+
+
+def pin_host_override(
+    config_path: Path,
+    device_class: str | None = None,
+    toolchain: str | None = None,
+) -> None:
+    """Pin operator-chosen host values so detection never overwrites them.
+
+    Used when detection is wrong (e.g. an exotic board) and the operator
+    forces the class/toolchain. Validates the class against the known set.
+    """
+    if device_class is not None and not is_valid_device_class(device_class):
+        raise ConfigError(
+            f"'{device_class}' is not a valid device class; valid: "
+            + ", ".join(sorted(_TOOLCHAIN_BY_CLASS))
+        )
+    existing = _load_config(config_path)
+    host = existing.get("host")
+    if not isinstance(host, dict):
+        host = {}
+    host["pinned"] = True
+    if device_class is not None:
+        host["device_class"] = device_class
+        host["toolchain"] = _TOOLCHAIN_BY_CLASS[device_class]
+    if toolchain is not None:
+        host["toolchain"] = toolchain
+    existing["host"] = host
+    _atomic_write(config_path, existing)
+    _logger.info("host_config_pinned", path=str(config_path), device_class=device_class)

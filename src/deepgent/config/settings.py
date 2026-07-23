@@ -62,6 +62,30 @@ class KnowledgeSettings(BaseModel):
     token_env: str = "DEEPGENT_KNOWLEDGE_TOKEN"
 
 
+class HostSettings(BaseModel):
+    """Detected/auto-configured host block (host layer).
+
+    Written by `deepgent setup` and round-tripped here so the harness can
+    read the host's device class, toolchain, and capabilities. Overridable
+    via DEEPGENT_HOST__* env vars; `pinned` marks an operator override that
+    detection must not overwrite.
+    """
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+    device_class: str | None = None
+    toolchain: str | None = None
+    local_execution: bool | None = None
+    accelerator: str | None = None
+    capabilities: list[str] = []
+    device_model: str | None = None
+    arch: str | None = None
+    detected_os: str | None = None
+    detected_at: float | None = None
+    detector_version: int | None = None
+    pinned: bool = False
+
+
 class DeepgentSettings(BaseSettings):
     """Runtime settings, overridable via DEEPGENT_ environment variables."""
 
@@ -73,6 +97,7 @@ class DeepgentSettings(BaseSettings):
     pricing: PricingTiers
     budget: BudgetSettings = BudgetSettings()
     knowledge: KnowledgeSettings = KnowledgeSettings()
+    host: HostSettings = HostSettings()
     default_board: str | None = None
     telemetry_enabled: bool = True
     permission_mode: PermissionMode = "default"

@@ -3,6 +3,7 @@
 from deepgent.config.settings import (
     BudgetSettings,
     DeepgentSettings,
+    HostSettings,
     ModelTiers,
     PricingTiers,
     TierPricing,
@@ -14,6 +15,7 @@ from deepgent.config.settings import (
 __all__ = [
     "BudgetSettings",
     "DeepgentSettings",
+    "HostSettings",
     "ModelTiers",
     "PricingTiers",
     "TierPricing",
