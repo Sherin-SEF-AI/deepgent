@@ -2,6 +2,14 @@
 corpus, and skill pack fetch."""
 
 from deepgent.knowledge.errata import ErrataScanResult, Erratum, scan_errata
+from deepgent.knowledge.fact_confidence import (
+    ArbitratedFact,
+    ArbitrationReport,
+    FactAssertion,
+    arbitrate,
+    arbitrate_all,
+    confidence_for,
+)
 from deepgent.knowledge.hardware_check import (
     ConflictReport,
     HardwareConfig,
@@ -20,6 +28,12 @@ from deepgent.knowledge.matrix import (
     detect_contradictions,
     next_to_verify,
     query,
+)
+from deepgent.knowledge.premortem import (
+    PredictedRisk,
+    PreMortem,
+    assemble_premortem,
+    premortem,
 )
 from deepgent.knowledge.products import (
     BomCandidate,
@@ -46,6 +60,8 @@ from deepgent.knowledge.skills import (
 
 __all__ = [
     "PROVENANCE_FIELDS",
+    "ArbitratedFact",
+    "ArbitrationReport",
     "BomCandidate",
     "BomConstraints",
     "Claim",
@@ -53,9 +69,12 @@ __all__ = [
     "Contradiction",
     "ErrataScanResult",
     "Erratum",
+    "FactAssertion",
     "HardwareConfig",
     "MatrixAnalysis",
     "Peripheral",
+    "PreMortem",
+    "PredictedRisk",
     "RagClient",
     "Rail",
     "SkillPack",
@@ -64,16 +83,21 @@ __all__ = [
     "Verdict",
     "VerifyCandidate",
     "analyze",
+    "arbitrate",
+    "arbitrate_all",
+    "assemble_premortem",
     "bom_advise",
     "build_knowledge_server",
     "build_knowledge_tools",
     "build_rag_client",
     "check_conflicts",
+    "confidence_for",
     "default_skills_dir",
     "detect_contradictions",
     "list_skills",
     "load_config",
     "next_to_verify",
+    "premortem",
     "query",
     "scan_errata",
     "sync_skills",

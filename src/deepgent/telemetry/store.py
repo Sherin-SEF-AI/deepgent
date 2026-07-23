@@ -73,6 +73,12 @@ CREATE TABLE IF NOT EXISTS corpus_candidates (
     fix_diff_ref TEXT NOT NULL DEFAULT '',
     approved INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS fact_outcomes (
+    source TEXT NOT NULL,
+    predicted REAL NOT NULL,
+    correct INTEGER NOT NULL,
+    ts REAL NOT NULL
+);
 """
 
 
@@ -166,6 +172,25 @@ class TelemetryStore:
             )
             self._conn.commit()
         _logger.debug("task_recorded", task_id=record.id, outcome=record.outcome)
+
+    def record_fact_outcome(self, source: str, predicted: float, correct: bool) -> None:
+        """Log whether a source's asserted fact later proved correct (#12)."""
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO fact_outcomes (source, predicted, correct, ts) VALUES (?, ?, ?, ?)",
+                (sanitize_text(source), float(predicted), 1 if correct else 0, time.time()),
+            )
+            self._conn.commit()
+
+    def fact_reliability(self, min_samples: int = 5) -> dict[str, float]:
+        """Observed correctness rate per source, once it has enough samples."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT source, AVG(correct), COUNT(*) FROM fact_outcomes GROUP BY source"
+            ).fetchall()
+        return {
+            row[0]: float(row[1]) for row in rows if row[2] >= min_samples and row[1] is not None
+        }
 
     def record_failure(self, event: FailureEvent) -> None:
         with self._lock:

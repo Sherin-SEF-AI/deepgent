@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from deepgent.evals.shadow import ShadowDiff
     from deepgent.knowledge.hardware_check import ConflictReport
     from deepgent.knowledge.matrix import MatrixAnalysis
+    from deepgent.knowledge.premortem import PreMortem
 
 from deepgent.config import load_settings
 from deepgent.containers import ContainerBuilder, load_jp6_spec
@@ -112,6 +113,17 @@ class KnowledgeController:
         from deepgent.knowledge.hardware_check import check_conflicts, load_config
 
         return check_conflicts(load_config(config_path.read_text()))
+
+    async def premortem(
+        self, symptom: str, hw: str | None = None, stack: dict[str, str] | None = None
+    ) -> "PreMortem":
+        from deepgent.knowledge.premortem import premortem
+
+        client = build_rag_client(load_settings())
+        try:
+            return await premortem(client, symptom, hw=hw, stack=stack)
+        finally:
+            await client.aclose()
 
 
 class ProfilingController:

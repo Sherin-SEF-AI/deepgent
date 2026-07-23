@@ -20,6 +20,8 @@ class KnowledgePanel(QWidget):
         self._controller = controller if controller is not None else KnowledgeController()
         self._task = AsyncTask(self)
         self._task.finished.connect(self._on_result)
+        self._premortem = AsyncTask(self)
+        self._premortem.finished.connect(self._on_premortem)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(8, 8, 8, 8)
@@ -54,10 +56,39 @@ class KnowledgePanel(QWidget):
         hw_row.addWidget(hw_btn)
         root.addLayout(hw_row)
 
+        pm_row = QHBoxLayout()
+        pm_row.setSpacing(4)
+        self._pm_symptom = QLineEdit()
+        self._pm_symptom.setPlaceholderText("pre-mortem: task/symptom to predict failures for")
+        self._pm_hw = QLineEdit()
+        self._pm_hw.setPlaceholderText("hw filter (optional)")
+        self._pm_hw.setFixedWidth(160)
+        pm_btn = toolbar_button("Pre-mortem", role="accent")
+        pm_btn.clicked.connect(self._on_premortem_run)
+        pm_row.addWidget(self._pm_symptom, 1)
+        pm_row.addWidget(self._pm_hw)
+        pm_row.addWidget(pm_btn)
+        root.addLayout(pm_row)
+
         self._log = LogView()
         root.addWidget(self._log, 1)
 
         self._task.failed.connect(lambda m: self._log.append_line(f"[error] {m}"))
+        self._premortem.failed.connect(lambda m: self._log.append_line(f"[error] {m}"))
+
+    def _on_premortem_run(self) -> None:
+        symptom = self._pm_symptom.text().strip()
+        if not symptom or self._premortem.running:
+            return
+        hw = self._pm_hw.text().strip() or None
+        self._log.append_line(f"pre-mortem: {symptom}")
+        self._premortem.start(lambda: self._controller.premortem(symptom, hw))
+
+    def _on_premortem(self, result: object) -> None:
+        from deepgent.knowledge.premortem import PreMortem
+
+        assert isinstance(result, PreMortem)
+        self._log.append_line(result.render())
 
     def _on_hw_check(self) -> None:
         from pathlib import Path

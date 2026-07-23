@@ -732,6 +732,71 @@ def matrix_analyze_cmd(
         raise typer.Exit(code=1)
 
 
+@app.command("premortem")
+def premortem_cmd(
+    symptom: str = typer.Option(..., "--symptom", help="Task/symptom to pre-mortem."),
+    hw: str | None = typer.Option(None, "--hw", help="Hardware filter."),
+    stack: str | None = typer.Option(None, "--stack", help="Stack key=value,key=value."),
+    debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
+) -> None:
+    """Predict failure modes for a task from corpus and matrix (#11)."""
+    from deepgent.knowledge import build_rag_client
+    from deepgent.knowledge.premortem import premortem
+
+    _configure_logging(debug)
+    stack_dict = dict(kv.split("=", 1) for kv in stack.split(",") if "=" in kv) if stack else None
+
+    async def _run() -> object:
+        client = build_rag_client(load_settings())
+        try:
+            return await premortem(client, symptom, hw=hw, stack=stack_dict)
+        finally:
+            await client.aclose()
+
+    try:
+        result = asyncio.run(_run())
+    except DeepgentError as exc:
+        _fail(str(exc), debug=debug, exc=exc)
+        return
+    typer.echo(result.render())  # type: ignore[attr-defined]
+
+
+@app.command("facts")
+def facts_cmd(
+    assertions: Path = typer.Option(..., "--assertions", help="Assertions JSON keyed by subject."),
+    debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
+) -> None:
+    """Arbitrate conflicting facts by calibrated provenance confidence (#12)."""
+    import json as json_module
+
+    from deepgent.knowledge.fact_confidence import FactAssertion, arbitrate_all
+    from deepgent.telemetry import TelemetryStore
+
+    _configure_logging(debug)
+    try:
+        raw = json_module.loads(assertions.read_text())
+        grouped = {
+            subject: [
+                FactAssertion(
+                    subject=subject,
+                    value=str(item["value"]),
+                    source=str(item["source"]),
+                    base_override=item.get("base_override"),
+                )
+                for item in items
+            ]
+            for subject, items in raw.items()
+        }
+        calibration = TelemetryStore().fact_reliability()
+        report = arbitrate_all(grouped, calibration)
+    except (DeepgentError, OSError, ValueError, KeyError) as exc:
+        _fail(str(exc), debug=debug, exc=exc if isinstance(exc, DeepgentError) else None)
+        return
+    typer.echo(report.render())
+    if report.conflicts:
+        raise typer.Exit(code=1)
+
+
 @app.command("hw-check")
 def hw_check_cmd(
     config: Path = typer.Option(..., "--config", help="Hardware config JSON (peripherals, rails)."),
