@@ -8,6 +8,7 @@ from deepgent.evals.cuda_check import (
     SanitizerError,
     parse_sanitizer_report,
 )
+from deepgent.evals.fleet import FleetResult, FleetRunner, new_run_id
 from deepgent.evals.latency_trace import (
     LatencyTrace,
     LatencyTracer,
@@ -76,6 +77,8 @@ __all__ = [
     "CriterionResult",
     "CudaCheckResult",
     "CudaSanitizerRunner",
+    "FleetResult",
+    "FleetRunner",
     "GoldenRunResult",
     "GoldenTask",
     "LatencyTrace",
@@ -109,6 +112,7 @@ __all__ = [
     "find_golden_file",
     "load_candidates",
     "load_golden",
+    "new_run_id",
     "pareto_frontier",
     "parse_frame_detections",
     "parse_frame_labels",

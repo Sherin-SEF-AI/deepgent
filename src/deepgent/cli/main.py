@@ -64,6 +64,8 @@ skills_app = typer.Typer(help="Inspect local skill packs.")
 app.add_typer(skills_app, name="skills")
 rag_app = typer.Typer(help="Datasheet RAG operations (owner/server mode).")
 app.add_typer(rag_app, name="rag")
+matrix_app = typer.Typer(help="Reason over compatibility-matrix claims.")
+app.add_typer(matrix_app, name="matrix")
 profile_app = typer.Typer(help="On-target performance and latency profiling.")
 app.add_typer(profile_app, name="profile")
 accuracy_app = typer.Typer(help="Closed-loop accuracy validation and scoring.")
@@ -675,6 +677,84 @@ def profile_nsight(
         return
     typer.echo(result.render())
     typer.echo(f"artifacts: {run_dir}")
+
+
+@matrix_app.command("query")
+def matrix_query_cmd(
+    claims: Path = typer.Option(..., "--claims", help="Claims JSON file."),
+    component: str = typer.Option(..., "--component", help="Target component to query."),
+    stack: str = typer.Option(..., "--stack", help="Stack as key=value,key=value."),
+    rules: Path | None = typer.Option(None, "--rules", help="Compatibility rules JSON file."),
+    debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
+) -> None:
+    """Query a cell with transitive inference over the claim set (#14)."""
+    from deepgent.knowledge.matrix import load_claims, load_rules, query
+
+    _configure_logging(debug)
+    try:
+        claim_list = load_claims(claims.read_text())
+        rule_set = load_rules(rules.read_text()) if rules else {}
+        stack_dict = dict(kv.split("=", 1) for kv in stack.split(",") if "=" in kv)
+        verdict = query(claim_list, stack_dict, component, rule_set)
+    except (DeepgentError, OSError, ValueError, KeyError) as exc:
+        _fail(str(exc), debug=debug, exc=exc if isinstance(exc, DeepgentError) else None)
+        return
+    works = "unknown" if verdict.works is None else ("works" if verdict.works else "fails")
+    typer.echo(f"{component}: {works}  (confidence {verdict.confidence:.2f}, {verdict.basis})")
+
+
+@matrix_app.command("analyze")
+def matrix_analyze_cmd(
+    claims: Path = typer.Option(..., "--claims", help="Claims JSON file."),
+    component: str = typer.Option(..., "--component", help="Target component."),
+    universe: Path | None = typer.Option(
+        None, "--universe", help="JSON array of candidate stacks for active learning."
+    ),
+    rules: Path | None = typer.Option(None, "--rules", help="Compatibility rules JSON file."),
+    debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
+) -> None:
+    """Find contradictions and the next cell worth verifying (#14)."""
+    import json as json_module
+
+    from deepgent.knowledge.matrix import analyze, load_claims, load_rules
+
+    _configure_logging(debug)
+    try:
+        claim_list = load_claims(claims.read_text())
+        rule_set = load_rules(rules.read_text()) if rules else {}
+        cells = json_module.loads(universe.read_text()) if universe else None
+        result = analyze(claim_list, component, cells, rule_set)
+    except (DeepgentError, OSError, ValueError, KeyError) as exc:
+        _fail(str(exc), debug=debug, exc=exc if isinstance(exc, DeepgentError) else None)
+        return
+    typer.echo(result.render())
+    if result.contradictions:
+        raise typer.Exit(code=1)
+
+
+@app.command("fleet")
+def fleet_cmd(
+    command: str = typer.Option(..., "--command", help="Benchmark command to run on each board."),
+    boards: str = typer.Option(..., "--boards", help="Comma-separated board ids."),
+    capture: float = typer.Option(30.0, "--capture", min=1.0, help="Capture seconds per board."),
+    debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
+) -> None:
+    """Run a benchmark across a fleet; build a compat+perf matrix (#7)."""
+    from deepgent.evals import FleetRunner, create_run_dir, new_run_id
+
+    _configure_logging(debug)
+    board_ids = [b.strip() for b in boards.split(",") if b.strip()]
+    try:
+        run_dir = create_run_dir("fleet", Path.cwd())
+        runner = FleetRunner(new_run_id(), run_dir)
+        result = asyncio.run(runner.run(command, board_ids, capture))
+    except DeepgentError as exc:
+        _fail(str(exc), debug=debug, exc=exc)
+        return
+    typer.echo(result.render_table())
+    typer.echo(f"artifacts: {run_dir}")
+    if not result.all_ok:
+        raise typer.Exit(code=1)
 
 
 @app.command("shadow")

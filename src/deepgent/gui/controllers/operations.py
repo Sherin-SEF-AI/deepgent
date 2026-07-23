@@ -13,10 +13,12 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from deepgent.evals.accuracy import AccuracyResult
     from deepgent.evals.cuda_check import CudaCheckResult
+    from deepgent.evals.fleet import FleetResult
     from deepgent.evals.model_selector import Constraint, SelectionResult
     from deepgent.evals.nsight import NsightResult
     from deepgent.evals.quant_sweep import QuantSweepResult
     from deepgent.evals.shadow import ShadowDiff
+    from deepgent.knowledge.matrix import MatrixAnalysis
 
 from deepgent.config import load_settings
 from deepgent.containers import ContainerBuilder, load_jp6_spec
@@ -215,6 +217,34 @@ class ModelsController:
         return await ModelSelector(board, run_dir).run(
             candidates, constraint, capture_s, accuracy_metric
         )
+
+
+class MatrixController:
+    """Fleet compat+perf matrix (#7) and matrix reasoning (#14)."""
+
+    async def fleet(
+        self,
+        command: str,
+        board_ids: list[str],
+        capture_s: float = 30.0,
+        project_root: Path | None = None,
+    ) -> "FleetResult":
+        from deepgent.evals.fleet import FleetRunner, new_run_id
+
+        root = project_root if project_root is not None else Path.cwd()
+        run_dir = create_run_dir("fleet", root)
+        return await FleetRunner(new_run_id(), run_dir).run(command, board_ids, capture_s)
+
+    def analyze(
+        self, claims_path: Path, component: str, universe_path: Path | None = None
+    ) -> "MatrixAnalysis":
+        import json
+
+        from deepgent.knowledge.matrix import analyze, load_claims
+
+        claims = load_claims(claims_path.read_text())
+        universe = json.loads(universe_path.read_text()) if universe_path else None
+        return analyze(claims, component, universe)
 
 
 class SkillsController:
