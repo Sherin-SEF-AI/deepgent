@@ -2,6 +2,14 @@
 corpus, and skill pack fetch."""
 
 from deepgent.knowledge.errata import ErrataScanResult, Erratum, scan_errata
+from deepgent.knowledge.hardware_check import (
+    ConflictReport,
+    HardwareConfig,
+    Peripheral,
+    Rail,
+    check_conflicts,
+    load_config,
+)
 from deepgent.knowledge.matrix import (
     Claim,
     Contradiction,
@@ -41,11 +49,15 @@ __all__ = [
     "BomCandidate",
     "BomConstraints",
     "Claim",
+    "ConflictReport",
     "Contradiction",
     "ErrataScanResult",
     "Erratum",
+    "HardwareConfig",
     "MatrixAnalysis",
+    "Peripheral",
     "RagClient",
+    "Rail",
     "SkillPack",
     "TriageResult",
     "UpgradeReport",
@@ -56,9 +68,11 @@ __all__ = [
     "build_knowledge_server",
     "build_knowledge_tools",
     "build_rag_client",
+    "check_conflicts",
     "default_skills_dir",
     "detect_contradictions",
     "list_skills",
+    "load_config",
     "next_to_verify",
     "query",
     "scan_errata",

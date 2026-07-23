@@ -44,10 +44,33 @@ class KnowledgePanel(QWidget):
         row.addWidget(btn)
         root.addLayout(row)
 
+        hw_row = QHBoxLayout()
+        hw_row.setSpacing(4)
+        self._hw_config = QLineEdit()
+        self._hw_config.setPlaceholderText("hardware config .json path (peripherals, rails)")
+        hw_btn = toolbar_button("Check hardware", role="accent")
+        hw_btn.clicked.connect(self._on_hw_check)
+        hw_row.addWidget(self._hw_config, 1)
+        hw_row.addWidget(hw_btn)
+        root.addLayout(hw_row)
+
         self._log = LogView()
         root.addWidget(self._log, 1)
 
         self._task.failed.connect(lambda m: self._log.append_line(f"[error] {m}"))
+
+    def _on_hw_check(self) -> None:
+        from pathlib import Path
+
+        config = self._hw_config.text().strip()
+        if not config:
+            return
+        try:
+            report = self._controller.hardware_check(Path(config))
+        except Exception as exc:  # surfaced, not swallowed
+            self._log.append_line(f"[error] {exc}")
+            return
+        self._log.append_line(report.render())
 
     def _on_triage(self) -> None:
         symptom = self._symptom.text().strip()

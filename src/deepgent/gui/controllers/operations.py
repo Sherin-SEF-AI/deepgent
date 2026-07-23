@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from deepgent.evals.nsight import NsightResult
     from deepgent.evals.quant_sweep import QuantSweepResult
     from deepgent.evals.shadow import ShadowDiff
+    from deepgent.knowledge.hardware_check import ConflictReport
     from deepgent.knowledge.matrix import MatrixAnalysis
 
 from deepgent.config import load_settings
@@ -106,6 +107,11 @@ class KnowledgeController:
             return await triage(client, symptom, hw=hw)
         finally:
             await client.aclose()
+
+    def hardware_check(self, config_path: Path) -> "ConflictReport":
+        from deepgent.knowledge.hardware_check import check_conflicts, load_config
+
+        return check_conflicts(load_config(config_path.read_text()))
 
 
 class ProfilingController:

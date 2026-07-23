@@ -732,6 +732,26 @@ def matrix_analyze_cmd(
         raise typer.Exit(code=1)
 
 
+@app.command("hw-check")
+def hw_check_cmd(
+    config: Path = typer.Option(..., "--config", help="Hardware config JSON (peripherals, rails)."),
+    debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
+) -> None:
+    """Detect pin/I2C/power conflicts in a carrier-board design (#8)."""
+    from deepgent.knowledge.hardware_check import check_conflicts, load_config
+
+    _configure_logging(debug)
+    try:
+        hw = load_config(config.read_text())
+        report = check_conflicts(hw)
+    except (DeepgentError, OSError, ValueError, KeyError) as exc:
+        _fail(str(exc), debug=debug, exc=exc if isinstance(exc, DeepgentError) else None)
+        return
+    typer.echo(report.render())
+    if not report.clean:
+        raise typer.Exit(code=1)
+
+
 @app.command("fleet")
 def fleet_cmd(
     command: str = typer.Option(..., "--command", help="Benchmark command to run on each board."),
