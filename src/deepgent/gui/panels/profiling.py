@@ -10,7 +10,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from deepgent.evals.cuda_check import CudaCheckResult
 from deepgent.evals.latency_trace import LatencyTrace
+from deepgent.evals.nsight import NsightResult
 from deepgent.evals.thermal_envelope import ThermalEnvelopeResult
 from deepgent.gui.async_bridge import AsyncTask
 from deepgent.gui.controllers.operations import ProfilingController
@@ -27,6 +29,10 @@ class ProfilingPanel(QWidget):
         self._thermal.finished.connect(self._on_thermal)
         self._latency = AsyncTask(self)
         self._latency.finished.connect(self._on_latency)
+        self._nsight = AsyncTask(self)
+        self._nsight.finished.connect(self._on_nsight)
+        self._cuda = AsyncTask(self)
+        self._cuda.finished.connect(self._on_cuda)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(8, 8, 8, 8)
@@ -80,11 +86,46 @@ class ProfilingPanel(QWidget):
         latency_row.addWidget(l_btn)
         root.addLayout(latency_row)
 
+        # Nsight row.
+        nsight_row = QHBoxLayout()
+        nsight_row.setSpacing(4)
+        nsight_row.addWidget(QLabel("nsight"))
+        self._n_board = QLineEdit()
+        self._n_board.setPlaceholderText("board id")
+        self._n_board.setFixedWidth(110)
+        self._n_command = QLineEdit()
+        self._n_command.setPlaceholderText("nsys wrapper emitting NSIGHT summary lines")
+        n_btn = toolbar_button("Run nsight", role="accent")
+        n_btn.clicked.connect(self._on_run_nsight)
+        nsight_row.addWidget(self._n_board)
+        nsight_row.addWidget(self._n_command, 1)
+        nsight_row.addWidget(n_btn)
+        root.addLayout(nsight_row)
+
+        # CUDA safety-check row.
+        cuda_row = QHBoxLayout()
+        cuda_row.setSpacing(4)
+        cuda_row.addWidget(QLabel("cuda"))
+        self._c_board = QLineEdit()
+        self._c_board.setPlaceholderText("board id")
+        self._c_board.setFixedWidth(110)
+        self._c_build = QLineEdit()
+        self._c_build.setPlaceholderText("build command (optional)")
+        self._c_run = QLineEdit()
+        self._c_run.setPlaceholderText("run command for compute-sanitizer")
+        c_btn = toolbar_button("cuda-check", role="accent")
+        c_btn.clicked.connect(self._on_run_cuda)
+        cuda_row.addWidget(self._c_board)
+        cuda_row.addWidget(self._c_build, 1)
+        cuda_row.addWidget(self._c_run, 1)
+        cuda_row.addWidget(c_btn)
+        root.addLayout(cuda_row)
+
         self._log = LogView()
         root.addWidget(self._log, 1)
 
-        self._thermal.failed.connect(lambda m: self._log.append_line(f"[error] {m}"))
-        self._latency.failed.connect(lambda m: self._log.append_line(f"[error] {m}"))
+        for task in (self._thermal, self._latency, self._nsight, self._cuda):
+            task.failed.connect(lambda m: self._log.append_line(f"[error] {m}"))
 
     def _on_run_thermal(self) -> None:
         board = self._t_board.text().strip()
@@ -114,3 +155,30 @@ class ProfilingPanel(QWidget):
     def _on_latency(self, result: object) -> None:
         assert isinstance(result, LatencyTrace)
         self._log.append_line(result.render_report())
+
+    def _on_run_nsight(self) -> None:
+        board = self._n_board.text().strip()
+        command = self._n_command.text().strip()
+        if not (board and command) or self._nsight.running:
+            return
+        self._log.append_line(f"nsight profile on {board}...")
+        self._nsight.start(lambda: self._controller.nsight(board, command))
+
+    def _on_nsight(self, result: object) -> None:
+        assert isinstance(result, NsightResult)
+        self._log.append_line(result.render())
+
+    def _on_run_cuda(self) -> None:
+        board = self._c_board.text().strip()
+        run = self._c_run.text().strip()
+        if not (board and run) or self._cuda.running:
+            return
+        build = self._c_build.text().strip() or None
+        self._log.append_line(f"cuda-check on {board}...")
+        self._cuda.start(
+            lambda: self._controller.cuda_check(board, run, build, ["memcheck", "racecheck"])
+        )
+
+    def _on_cuda(self, result: object) -> None:
+        assert isinstance(result, CudaCheckResult)
+        self._log.append_line(result.render())

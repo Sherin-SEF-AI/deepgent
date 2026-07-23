@@ -12,7 +12,9 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from deepgent.evals.accuracy import AccuracyResult
+    from deepgent.evals.cuda_check import CudaCheckResult
     from deepgent.evals.model_selector import Constraint, SelectionResult
+    from deepgent.evals.nsight import NsightResult
     from deepgent.evals.quant_sweep import QuantSweepResult
 
 from deepgent.config import load_settings
@@ -116,6 +118,29 @@ class ProfilingController:
         run_dir = create_run_dir(f"latency-{board}", root)
         tracer = LatencyTracer(board, run_dir)
         return await tracer.run(command, budget_ms=budget_ms, capture_s=capture_s)
+
+    async def nsight(
+        self, board: str, command: str, capture_s: float = 120.0, project_root: Path | None = None
+    ) -> "NsightResult":
+        from deepgent.evals.nsight import NsightProfiler
+
+        root = project_root if project_root is not None else Path.cwd()
+        run_dir = create_run_dir(f"nsight-{board}", root)
+        return await NsightProfiler(board, run_dir).run(command, capture_s)
+
+    async def cuda_check(
+        self,
+        board: str,
+        run: str,
+        build: str | None,
+        tools: list[str],
+        project_root: Path | None = None,
+    ) -> "CudaCheckResult":
+        from deepgent.evals.cuda_check import CudaSanitizerRunner
+
+        root = project_root if project_root is not None else Path.cwd()
+        run_dir = create_run_dir(f"cuda-{board}", root)
+        return await CudaSanitizerRunner(board, run_dir).run(run, build, tools)
 
 
 class ModelsController:

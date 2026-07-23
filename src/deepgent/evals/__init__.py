@@ -2,6 +2,12 @@
 
 from deepgent.evals.accuracy import AccuracyGate, AccuracyResult
 from deepgent.evals.bench import BenchResult, run_benchmark, run_benchmark_on
+from deepgent.evals.cuda_check import (
+    CudaCheckResult,
+    CudaSanitizerRunner,
+    SanitizerError,
+    parse_sanitizer_report,
+)
 from deepgent.evals.latency_trace import (
     LatencyTrace,
     LatencyTracer,
@@ -15,6 +21,14 @@ from deepgent.evals.model_selector import (
     ModelSelector,
     SelectionResult,
     load_candidates,
+)
+from deepgent.evals.nsight import (
+    BottleneckReport,
+    NsightProfiler,
+    NsightResult,
+    NsightStats,
+    classify_bottleneck,
+    parse_nsight_report,
 )
 from deepgent.evals.quant_sweep import (
     QuantSweepResult,
@@ -48,18 +62,25 @@ __all__ = [
     "AccuracyGate",
     "AccuracyResult",
     "BenchResult",
+    "BottleneckReport",
     "Candidate",
     "Constraint",
     "CriterionResult",
+    "CudaCheckResult",
+    "CudaSanitizerRunner",
     "GoldenRunResult",
     "GoldenTask",
     "LatencyTrace",
     "LatencyTracer",
     "ModeEnvelope",
     "ModelSelector",
+    "NsightProfiler",
+    "NsightResult",
+    "NsightStats",
     "PowerMode",
     "QuantSweepResult",
     "QuantSweepRunner",
+    "SanitizerError",
     "SelectionResult",
     "StageLatency",
     "SuccessCriterion",
@@ -70,6 +91,7 @@ __all__ = [
     "analyze_mode",
     "analyze_throughput",
     "analyze_trace",
+    "classify_bottleneck",
     "create_run_dir",
     "expand_grid",
     "find_golden_file",
@@ -77,6 +99,8 @@ __all__ = [
     "load_golden",
     "pareto_frontier",
     "parse_modes",
+    "parse_nsight_report",
+    "parse_sanitizer_report",
     "parse_stage_lines",
     "parse_throughput_series",
     "run_benchmark",

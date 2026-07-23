@@ -655,6 +655,55 @@ def select_model_cmd(
         raise typer.Exit(code=1)
 
 
+@profile_app.command("nsight")
+def profile_nsight(
+    board: str = typer.Option(..., "--board", help="Registered board id."),
+    command: str = typer.Option(..., "--command", help="nsys wrapper emitting NSIGHT summary."),
+    capture: float = typer.Option(120.0, "--capture", min=1.0, help="Capture seconds."),
+    debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
+) -> None:
+    """Classify the dominant bottleneck from an Nsight Systems trace (#10)."""
+    from deepgent.evals import create_run_dir
+    from deepgent.evals.nsight import NsightProfiler
+
+    _configure_logging(debug)
+    try:
+        run_dir = create_run_dir(f"nsight-{board}", Path.cwd())
+        result = asyncio.run(NsightProfiler(board, run_dir).run(command, capture))
+    except DeepgentError as exc:
+        _fail(str(exc), debug=debug, exc=exc)
+        return
+    typer.echo(result.render())
+    typer.echo(f"artifacts: {run_dir}")
+
+
+@app.command("cuda-check")
+def cuda_check_cmd(
+    board: str = typer.Option(..., "--board", help="Registered GPU board id."),
+    run: str = typer.Option(..., "--run", help="Command that runs the compiled CUDA target."),
+    build: str | None = typer.Option(None, "--build", help="Optional build command first."),
+    tools: str = typer.Option("memcheck,racecheck", "--tools", help="Comma-separated sanitizers."),
+    debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
+) -> None:
+    """Run compute-sanitizer on a target and gate on memory/race errors (#5)."""
+    from deepgent.evals import create_run_dir
+    from deepgent.evals.cuda_check import CudaSanitizerRunner
+
+    _configure_logging(debug)
+    tool_list = [t.strip() for t in tools.split(",") if t.strip()]
+    try:
+        run_dir = create_run_dir(f"cuda-{board}", Path.cwd())
+        runner = CudaSanitizerRunner(board, run_dir)
+        result = asyncio.run(runner.run(run, build, tool_list))
+    except DeepgentError as exc:
+        _fail(str(exc), debug=debug, exc=exc)
+        return
+    typer.echo(result.render())
+    typer.echo(f"artifacts: {run_dir}")
+    if not result.clean:
+        raise typer.Exit(code=1)
+
+
 @app.command("ci")
 def ci_run(
     task: str = typer.Option(..., "--task", help="Task to run non-interactively."),

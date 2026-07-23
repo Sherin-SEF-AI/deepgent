@@ -6,6 +6,7 @@ from claude_agent_sdk.types import HookEvent
 from deepgent.config import DeepgentSettings
 from deepgent.core.budget import BudgetTracker
 from deepgent.hooks.budget_guard import make_budget_guard
+from deepgent.hooks.cuda_gate import make_cuda_gate
 from deepgent.hooks.fact_guard import KNOWLEDGE_TOOL_PREFIX, fact_guard
 from deepgent.hooks.misra_gate import make_misra_gate
 from deepgent.hooks.safety_gate import BOARD_FARM_TOOL_PREFIX, make_safety_gate
@@ -31,6 +32,7 @@ def build_hooks(
         "PostToolUse": [
             HookMatcher(hooks=[make_budget_guard(tracker)]),
             HookMatcher(matcher="Write|Edit", hooks=[make_misra_gate()]),
+            HookMatcher(matcher="Write|Edit", hooks=[make_cuda_gate()]),
             HookMatcher(matcher=f"{KNOWLEDGE_TOOL_PREFIX}.*", hooks=[fact_guard]),
         ],
     }
