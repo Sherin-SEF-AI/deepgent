@@ -76,10 +76,10 @@ def test_bare_task_dispatches_to_orchestrator(monkeypatch: pytest.MonkeyPatch) -
 def _hermetic_host(monkeypatch: pytest.MonkeyPatch) -> None:
     """Pin host-dependent doctor checks (uv/docker/binfmt) to healthy values
     so these tests do not depend on the CI machine's state."""
-    import deepgent.cli.main as cli_main
+    import deepgent.host.diagnostics as diagnostics
 
-    monkeypatch.setattr(cli_main.shutil, "which", lambda name: f"/usr/bin/{name}")
-    monkeypatch.setattr(cli_main.platform, "machine", lambda: "aarch64")
+    monkeypatch.setattr(diagnostics.shutil, "which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(diagnostics.platform, "machine", lambda: "aarch64")
 
 
 @pytest.mark.unit

@@ -11,13 +11,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install Qt offscreen runtime libs
+        run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libdbus-1-3
+
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.12"
 
       - name: Sync dependencies
-        run: uv sync --all-groups
+        run: uv sync --all-groups --all-extras
 
       - name: Lint
         run: uv run ruff check
@@ -30,3 +33,5 @@ jobs:
 
       - name: Unit tests
         run: uv run pytest -m "not hardware"
+        env:
+          QT_QPA_PLATFORM: offscreen

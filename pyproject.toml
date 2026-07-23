@@ -24,6 +24,13 @@ Repository = "https://github.com/Sherin-SEF-AI/deepgent"
 [project.scripts]
 deepgent = "deepgent.cli:app"
 dg = "deepgent.cli:app"
+deepgent-gui = "deepgent.gui.app:launch"
+
+[project.optional-dependencies]
+gui = [
+    "pyside6>=6.7",
+    "qasync>=0.27",
+]
 
 [dependency-groups]
 dev = [
@@ -63,6 +70,19 @@ extend-immutable-calls = ["typer.Argument", "typer.Option"]
 strict = true
 files = ["src", "server"]
 python_version = "3.12"
+
+[[tool.mypy.overrides]]
+# PySide6 subclassing and Signal/Slot decorators are Any-typed in the stubs;
+# relax the strictest checks for the Qt view layer only. Controllers stay strict.
+module = "deepgent.gui.*"
+disallow_subclassing_any = false
+disallow_untyped_decorators = false
+warn_return_any = false
+
+[[tool.mypy.overrides]]
+# qasync ships no type stubs / py.typed marker.
+module = "qasync"
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

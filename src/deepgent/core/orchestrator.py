@@ -1,5 +1,6 @@
 """One-shot task orchestration over the Claude Agent SDK."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -109,8 +110,17 @@ class Orchestrator:
             model=self._settings.models.sonnet,
         )
 
-    async def run_task(self, task: str) -> TaskOutcome:
-        """Run a single task to completion and return its outcome."""
+    async def run_task(
+        self,
+        task: str,
+        on_text: Callable[[str], None] | None = None,
+    ) -> TaskOutcome:
+        """Run a single task to completion and return its outcome.
+
+        on_text, when given, is called with each assistant text block as it
+        streams, so a live UI can render progress without waiting for the
+        final result.
+        """
         import time
 
         tracker = BudgetTracker(self._settings)
@@ -126,6 +136,8 @@ class Orchestrator:
                 for block in message.content:
                     if isinstance(block, TextBlock):
                         log.debug("assistant_text", text=block.text)
+                        if on_text is not None:
+                            on_text(block.text)
             elif isinstance(message, ResultMessage):
                 result = message
 

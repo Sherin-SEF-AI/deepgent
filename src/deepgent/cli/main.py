@@ -5,11 +5,8 @@ Implemented: `deepgent "<task>"`, `deepgent init`, `deepgent doctor`,
 """
 
 import asyncio
-import importlib.metadata
 import logging
 import os
-import platform
-import shutil
 import sys
 from pathlib import Path
 from typing import Any
@@ -34,7 +31,6 @@ from deepgent.boards import (
 )
 from deepgent.config import load_settings
 from deepgent.containers import ContainerBuilder, load_jp6_spec
-from deepgent.containers.build import BINFMT_FLAG
 from deepgent.core import Orchestrator
 from deepgent.errors import DeepgentError
 from deepgent.evals import run_golden
@@ -847,6 +843,24 @@ def setup(
             typer.echo("registered target 'local' (run tasks on this machine directly)")
 
 
+@app.command("gui")
+def gui_cmd(
+    debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
+) -> None:
+    """Launch the desktop GUI (requires the optional 'gui' extra)."""
+    _configure_logging(debug)
+    try:
+        from deepgent.gui.app import launch
+    except ImportError as exc:
+        _fail(
+            "the GUI is not installed; install it with: uv pip install "
+            f"'deepgent[gui]'  (missing: {exc.name})",
+            debug=debug,
+        )
+        return
+    raise typer.Exit(code=launch())
+
+
 @app.command("host")
 def host_show(
     json_out: bool = typer.Option(False, "--json", help="Emit the profile as JSON."),
@@ -936,89 +950,21 @@ def doctor(
     """Check that the environment can run deepgent tasks."""
     import json as json_module
 
+    from deepgent.host.diagnostics import run_checks
+
     _configure_logging(debug, quiet=json_out)
-    failures = 0
-    checks: list[dict[str, object]] = []
+    results = run_checks()
+    failures = sum(1 for c in results if not c.ok)
+    checks = [{"name": c.name, "ok": c.ok, "detail": c.detail} for c in results]
 
-    def report(name: str, ok: bool, detail: str) -> None:
-        nonlocal failures
-        if not ok:
-            failures += 1
-        checks.append({"name": name, "ok": ok, "detail": detail})
-        if json_out:
-            return
-        mark = (
-            typer.style("ok  ", fg=typer.colors.GREEN)
-            if ok
-            else typer.style("FAIL", fg=typer.colors.RED)
-        )
-        typer.echo(f"{mark} {name}: {detail}")
-
-    from deepgent.host import detect_host
-
-    profile = detect_host()
-    report(
-        "host",
-        True,
-        f"{profile.device_class} / {profile.arch} / accel={profile.accelerator}",
-    )
-
-    py = sys.version_info
-    report(
-        "python",
-        py >= (3, 12),
-        f"{py.major}.{py.minor}.{py.micro} (need >= 3.12)",
-    )
-
-    uv_path = shutil.which("uv")
-    report("uv", uv_path is not None, uv_path or "not on PATH; install from astral.sh/uv")
-
-    docker_path = shutil.which("docker")
-    report(
-        "docker",
-        docker_path is not None,
-        docker_path or "not on PATH; install Docker Engine (docs.docker.com/engine/install)",
-    )
-
-    native_arm = platform.machine() in ("aarch64", "arm64")
-    binfmt_ok = native_arm or BINFMT_FLAG.exists()
-    if native_arm:
-        binfmt_detail = "native arm64 host"
-    elif binfmt_ok:
-        binfmt_detail = str(BINFMT_FLAG)
-    else:
-        binfmt_detail = (
-            "not registered; run: docker run --privileged --rm tonistiigi/binfmt --install arm64"
-        )
-    report("qemu binfmt (arm64)", binfmt_ok, binfmt_detail)
-
-    try:
-        settings = load_settings()
-    except DeepgentError as exc:
-        report("versions.toml", False, str(exc))
-    else:
-        report(
-            "versions.toml",
-            True,
-            f"model tiers: opus={settings.models.opus}, "
-            f"sonnet={settings.models.sonnet}, haiku={settings.models.haiku}",
-        )
-
-    try:
-        sdk_version = importlib.metadata.version("claude-agent-sdk")
-    except importlib.metadata.PackageNotFoundError:
-        report("claude-agent-sdk", False, "not installed; run uv sync")
-    else:
-        report("claude-agent-sdk", True, sdk_version)
-
-    has_key = bool(os.environ.get("ANTHROPIC_API_KEY"))
-    report(
-        "api key",
-        has_key,
-        "ANTHROPIC_API_KEY is set"
-        if has_key
-        else "ANTHROPIC_API_KEY is not set; export it or configure the OS keyring",
-    )
+    if not json_out:
+        for c in results:
+            mark = (
+                typer.style("ok  ", fg=typer.colors.GREEN)
+                if c.ok
+                else typer.style("FAIL", fg=typer.colors.RED)
+            )
+            typer.echo(f"{mark} {c.name}: {c.detail}")
 
     if json_out:
         typer.echo(json_module.dumps({"ok": failures == 0, "failures": failures, "checks": checks}))
