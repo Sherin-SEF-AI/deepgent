@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
 from deepgent.evals.fleet import FleetResult
 from deepgent.gui.async_bridge import AsyncTask
 from deepgent.gui.controllers.operations import MatrixController
+from deepgent.gui.widgets.animations import Spinner, bind_spinner
 from deepgent.gui.widgets.common import LogView, toolbar_button
 
 
@@ -68,6 +69,10 @@ class MatrixPanel(QWidget):
 
         self._log = LogView()
         root.addWidget(self._log, 1)
+
+        self._spinner = Spinner()
+        bind_spinner(self._fleet, self._spinner)
+        root.addWidget(self._spinner)
 
         self._fleet.failed.connect(lambda m: self._log.append_line(f"[error] {m}"))
 

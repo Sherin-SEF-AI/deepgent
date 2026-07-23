@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
 from deepgent.core import TaskOutcome
 from deepgent.gui.async_bridge import AsyncTask
 from deepgent.gui.controllers.tasks import TaskController
+from deepgent.gui.widgets.animations import Spinner, bind_spinner
 from deepgent.gui.widgets.common import LogView, toolbar_button
 
 
@@ -51,9 +52,12 @@ class RunTaskPanel(QWidget):
         self._stop_btn.setEnabled(False)
         self._run_btn.clicked.connect(self._on_run)
         self._stop_btn.clicked.connect(self._on_stop)
+        self._spinner = Spinner()
+        bind_spinner(self._task, self._spinner)
         input_row.addWidget(self._input, 1)
         input_row.addWidget(QLabel("budget"))
         input_row.addWidget(self._budget)
+        input_row.addWidget(self._spinner)
         input_row.addWidget(self._run_btn)
         input_row.addWidget(self._stop_btn)
         root.addLayout(input_row)

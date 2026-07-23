@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
 
 from deepgent.gui.async_bridge import AsyncTask
 from deepgent.gui.controllers.operations import KnowledgeController
+from deepgent.gui.widgets.animations import Spinner, bind_spinner
 from deepgent.gui.widgets.common import LogView, toolbar_button
 from deepgent.knowledge.products import TriageResult
 
@@ -88,6 +89,12 @@ class KnowledgePanel(QWidget):
 
         self._log = LogView()
         root.addWidget(self._log, 1)
+
+        self._spinner = Spinner()
+        bind_spinner(self._task, self._spinner)
+        bind_spinner(self._premortem, self._spinner)
+        bind_spinner(self._reflect, self._spinner)
+        root.addWidget(self._spinner)
 
         self._task.failed.connect(lambda m: self._log.append_line(f"[error] {m}"))
         self._premortem.failed.connect(lambda m: self._log.append_line(f"[error] {m}"))

@@ -16,6 +16,7 @@ from deepgent.evals.nsight import NsightResult
 from deepgent.evals.thermal_envelope import ThermalEnvelopeResult
 from deepgent.gui.async_bridge import AsyncTask
 from deepgent.gui.controllers.operations import ProfilingController
+from deepgent.gui.widgets.animations import Spinner, bind_spinner
 from deepgent.gui.widgets.common import LogView, toolbar_button
 
 
@@ -123,6 +124,13 @@ class ProfilingPanel(QWidget):
 
         self._log = LogView()
         root.addWidget(self._log, 1)
+
+        self._spinner = Spinner()
+        bind_spinner(self._thermal, self._spinner)
+        bind_spinner(self._latency, self._spinner)
+        bind_spinner(self._nsight, self._spinner)
+        bind_spinner(self._cuda, self._spinner)
+        root.addWidget(self._spinner)
 
         for task in (self._thermal, self._latency, self._nsight, self._cuda):
             task.failed.connect(lambda m: self._log.append_line(f"[error] {m}"))

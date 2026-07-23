@@ -27,6 +27,7 @@ from deepgent.gui.panels.profiling import ProfilingPanel
 from deepgent.gui.panels.run_task import RunTaskPanel
 from deepgent.gui.panels.skills import SkillsPanel
 from deepgent.gui.panels.telemetry import TelemetryPanel
+from deepgent.gui.widgets.animations import fade_in
 
 # (label, factory) for each surface, in toolbar order.
 _SURFACES: list[tuple[str, Callable[[], QWidget]]] = [
@@ -95,3 +96,6 @@ class MainWindow(QMainWindow):
                 self._stack.removeWidget(old)
                 old.deleteLater()
         self._stack.setCurrentIndex(index)
+        current = self._stack.currentWidget()
+        if current is not None:
+            fade_in(current)

@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
 
 from deepgent.gui.async_bridge import AsyncTask
 from deepgent.gui.controllers.boards import BoardsController
+from deepgent.gui.widgets.animations import Spinner, bind_spinner
 from deepgent.gui.widgets.common import toolbar_button
 
 _COLUMNS = ("id", "transport", "where", "type", "caps", "leased by")
@@ -39,6 +40,9 @@ class BoardsPanel(QWidget):
         actions.addWidget(test)
         actions.addWidget(remove)
         actions.addStretch(1)
+        self._spinner = Spinner()
+        bind_spinner(self._probe, self._spinner)
+        actions.addWidget(self._spinner)
         root.addLayout(actions)
 
         self._table = QTableWidget(0, len(_COLUMNS))

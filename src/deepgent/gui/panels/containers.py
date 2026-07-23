@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
 
 from deepgent.gui.async_bridge import AsyncTask
 from deepgent.gui.controllers.operations import ContainersController
+from deepgent.gui.widgets.animations import Spinner, bind_spinner
 from deepgent.gui.widgets.common import LogView, toolbar_button
 
 
@@ -40,6 +41,10 @@ class ContainersPanel(QWidget):
 
         self._log = LogView()
         root.addWidget(self._log, 1)
+
+        self._spinner = Spinner()
+        bind_spinner(self._task, self._spinner)
+        root.addWidget(self._spinner)
 
         self._task.failed.connect(lambda m: self._log.append_line(f"[error] {m}"))
         self._task.done.connect(lambda: self._build_btn.setEnabled(True))

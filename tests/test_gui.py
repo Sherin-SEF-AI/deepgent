@@ -164,6 +164,64 @@ def test_main_window_activates_every_surface(qapp: QApplication) -> None:
     window.deleteLater()
 
 
+# --- Animations -------------------------------------------------------------
+
+
+def test_spinner_refcounts(qapp: QApplication) -> None:
+    from deepgent.gui.widgets.animations import Spinner
+
+    spinner = Spinner()
+    assert spinner.spinning is False
+    spinner.start()
+    spinner.start()  # a second concurrent task
+    assert spinner.spinning is True
+    spinner.stop()
+    assert spinner.spinning is True  # one task still running
+    spinner.stop()
+    assert spinner.spinning is False
+    spinner.stop()  # underflow is safe
+    assert spinner.spinning is False
+
+
+def test_bind_spinner_follows_task(qapp: QApplication) -> None:
+    from deepgent.gui.async_bridge import AsyncTask
+    from deepgent.gui.widgets.animations import Spinner, bind_spinner
+
+    async def scenario() -> list[bool]:
+        task = AsyncTask()
+        spinner = Spinner()
+        bind_spinner(task, spinner)
+        states: list[bool] = []
+
+        async def work() -> None:
+            await asyncio.sleep(0)
+
+        task.start(work)
+        states.append(spinner.spinning)  # started -> spinning
+        while task.running:
+            await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        states.append(spinner.spinning)  # done -> stopped
+        return states
+
+    started, stopped = asyncio.run(scenario())
+    assert started is True and stopped is False
+
+
+def test_fade_in_and_hover_glow(qapp: QApplication) -> None:
+    from PySide6.QtWidgets import QLabel
+
+    from deepgent.gui.widgets.animations import attach_hover_glow, fade_in
+    from deepgent.gui.widgets.common import toolbar_button
+
+    label = QLabel("x")
+    fade_in(label)  # applies an opacity effect + animation, no crash offscreen
+    assert label.graphicsEffect() is not None
+    button = toolbar_button("Run", role="accent")  # gets a hover glow
+    assert button.graphicsEffect() is not None
+    attach_hover_glow(toolbar_button("plain"))  # explicit attach also works
+
+
 # --- Async bridge -----------------------------------------------------------
 
 

@@ -29,6 +29,7 @@ from deepgent.boards import (
     registry_path,
     remove_board,
 )
+from deepgent.cli.progress import activity, run_async
 from deepgent.config import load_settings
 from deepgent.containers import ContainerBuilder, load_jp6_spec
 from deepgent.core import Orchestrator
@@ -141,11 +142,11 @@ def run_one_shot(
     debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks and debug logs."),
 ) -> None:
     """Run a single task to completion (also reachable as `deepgent "<task>"`)."""
-    _configure_logging(debug)
+    _configure_logging(debug, quiet=not debug)
     try:
         settings = load_settings()
         orchestrator = Orchestrator(settings=settings, cwd=Path.cwd())
-        outcome = asyncio.run(orchestrator.run_task(task))
+        outcome = run_async(orchestrator.run_task(task), "running task", spin=not debug)
     except DeepgentError as exc:
         _fail(str(exc), debug=debug, exc=exc)
         return
@@ -168,14 +169,15 @@ def containers_build(
     debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
 ) -> None:
     """Build a version-pinned toolchain container (linux/arm64 via qemu)."""
-    _configure_logging(debug)
+    _configure_logging(debug, quiet=not debug)
     if target != "jp6":
         _fail(f"unknown container target '{target}'; available: jp6", debug=debug)
     try:
         builder = ContainerBuilder(load_jp6_spec())
-        builder.build()
-        if smoke:
-            builder.cuda_smoke()
+        with activity("building toolchain container", enabled=not debug):
+            builder.build()
+            if smoke:
+                builder.cuda_smoke()
     except DeepgentError as exc:
         _fail(str(exc), debug=debug, exc=exc)
         return
@@ -242,7 +244,7 @@ def boards_test(
     debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
 ) -> None:
     """Connect to a board and verify it answers."""
-    _configure_logging(debug)
+    _configure_logging(debug, quiet=not debug)
 
     async def _probe() -> str:
         board = get_board(board_id)
@@ -292,7 +294,7 @@ def evals_run(
     from deepgent.evals.runner import diff_against_baseline
     from deepgent.evals.runner import update_baseline as save_baseline
 
-    _configure_logging(debug)
+    _configure_logging(debug, quiet=not debug)
     try:
         result = asyncio.run(run_golden(task, Path.cwd()))
     except DeepgentError as exc:
@@ -330,7 +332,7 @@ def bisect_cmd(
     from deepgent.evals import run_golden
     from deepgent.evals.bisect import bisect as run_bisect
 
-    _configure_logging(debug)
+    _configure_logging(debug, quiet=not debug)
     try:
         revs = subprocess.run(
             ["git", "rev-list", "--reverse", f"{good}..{bad}"],
@@ -380,7 +382,7 @@ def replay_cmd(
     """Record real sensor streams as fixtures and replay them (Tier 1)."""
     from deepgent.evals.replay import ReplayRecorder, list_fixtures
 
-    _configure_logging(debug)
+    _configure_logging(debug, quiet=not debug)
     if action == "list":
         for manifest in list_fixtures(Path.cwd()):
             typer.echo(
@@ -420,11 +422,13 @@ def differential_cmd(
     from deepgent.evals import create_run_dir
     from deepgent.evals.differential import DifferentialRunner
 
-    _configure_logging(debug)
+    _configure_logging(debug, quiet=not debug)
     board_ids = [b.strip() for b in boards.split(",") if b.strip()]
     try:
         runner = DifferentialRunner(Path.cwd())
-        result = asyncio.run(runner.run(artifact, board_ids, command))
+        result = run_async(
+            runner.run(artifact, board_ids, command), "running differential", spin=not debug
+        )
         run_dir = create_run_dir("differential", Path.cwd())
         runner.persist(result, run_dir)
     except DeepgentError as exc:
@@ -448,12 +452,12 @@ def soak_run(
     from deepgent.evals import create_run_dir
     from deepgent.evals.soak import AnomalyRules, SoakRunner, default_phases
 
-    _configure_logging(debug)
+    _configure_logging(debug, quiet=not debug)
     try:
         run_dir = create_run_dir(f"soak-{board}", Path.cwd())
         runner = SoakRunner(board, run_dir, rules=AnomalyRules(tj_max_c=tj_max))
         phases = default_phases(hours * 3600.0, workload)
-        result = asyncio.run(runner.run(phases))
+        result = run_async(runner.run(phases), "soaking", spin=not debug)
     except DeepgentError as exc:
         _fail(str(exc), debug=debug, exc=exc)
         return
@@ -478,12 +482,16 @@ def profile_thermal(
     from deepgent.evals import create_run_dir, parse_modes
     from deepgent.evals.thermal_envelope import ThermalEnvelopeProfiler
 
-    _configure_logging(debug)
+    _configure_logging(debug, quiet=not debug)
     try:
         mode_list = parse_modes(modes) if modes else None
         run_dir = create_run_dir(f"thermal-{board}", Path.cwd())
         profiler = ThermalEnvelopeProfiler(board, run_dir, window_s=window)
-        result = asyncio.run(profiler.run(workload, hold, mode_list, tj_ceiling_c=tj_max))
+        result = run_async(
+            profiler.run(workload, hold, mode_list, tj_ceiling_c=tj_max),
+            "profiling thermal envelope",
+            spin=not debug,
+        )
     except DeepgentError as exc:
         _fail(str(exc), debug=debug, exc=exc)
         return
@@ -505,11 +513,15 @@ def profile_latency(
     from deepgent.evals import create_run_dir
     from deepgent.evals.latency_trace import LatencyTracer
 
-    _configure_logging(debug)
+    _configure_logging(debug, quiet=not debug)
     try:
         run_dir = create_run_dir(f"latency-{board}", Path.cwd())
         tracer = LatencyTracer(board, run_dir)
-        trace = asyncio.run(tracer.run(command, budget_ms=budget_ms, capture_s=capture))
+        trace = run_async(
+            tracer.run(command, budget_ms=budget_ms, capture_s=capture),
+            "tracing latency",
+            spin=not debug,
+        )
     except DeepgentError as exc:
         _fail(str(exc), debug=debug, exc=exc)
         return
@@ -540,7 +552,7 @@ def quant_sweep_cmd(
     from deepgent.evals import create_run_dir, expand_grid, select_best
     from deepgent.evals.quant_sweep import QuantSweepRunner
 
-    _configure_logging(debug)
+    _configure_logging(debug, quiet=not debug)
     try:
         configs = expand_grid(
             [p.strip() for p in precisions.split(",") if p.strip()],
@@ -549,7 +561,11 @@ def quant_sweep_cmd(
         )
         run_dir = create_run_dir(f"quant-{board}", Path.cwd())
         runner = QuantSweepRunner(board, run_dir)
-        result = asyncio.run(runner.run(command, configs, capture, accuracy_metric))
+        result = run_async(
+            runner.run(command, configs, capture, accuracy_metric),
+            "sweeping quantization configs",
+            spin=not debug,
+        )
     except (DeepgentError, ValueError) as exc:
         _fail(str(exc), debug=debug, exc=exc if isinstance(exc, DeepgentError) else None)
         return
@@ -575,10 +591,14 @@ def accuracy_gate_cmd(
     from deepgent.evals import create_run_dir
     from deepgent.evals.accuracy import AccuracyGate, load_baseline
 
-    _configure_logging(debug)
+    _configure_logging(debug, quiet=not debug)
     try:
         base = load_baseline(baseline, metric)
-        result = asyncio.run(AccuracyGate().run(board, command, metric, base, tolerance, capture))
+        result = run_async(
+            AccuracyGate().run(board, command, metric, base, tolerance, capture),
+            "running accuracy eval",
+            spin=not debug,
+        )
         run_dir = create_run_dir(f"accuracy-{board}", Path.cwd())
         (run_dir / "accuracy.txt").write_text(result.render())
     except DeepgentError as exc:
@@ -601,7 +621,7 @@ def accuracy_score_cmd(
     """Score local predictions against ground truth (mAP or top-1) (#2)."""
     from deepgent.evals.accuracy import score_classification_files, score_detection_files
 
-    _configure_logging(debug)
+    _configure_logging(debug, quiet=not debug)
     try:
         if kind == "detection":
             value = score_detection_files(predictions, truth, iou)
@@ -636,7 +656,7 @@ def select_model_cmd(
     from deepgent.evals import create_run_dir
     from deepgent.evals.model_selector import Constraint, ModelSelector, load_candidates
 
-    _configure_logging(debug)
+    _configure_logging(debug, quiet=not debug)
     try:
         candidates = load_candidates(manifest)
         constraint = Constraint(
@@ -647,7 +667,11 @@ def select_model_cmd(
         )
         run_dir = create_run_dir(f"select-{board}", Path.cwd())
         selector = ModelSelector(board, run_dir)
-        result = asyncio.run(selector.run(candidates, constraint, capture, accuracy_metric))
+        result = run_async(
+            selector.run(candidates, constraint, capture, accuracy_metric),
+            "benchmarking candidates",
+            spin=not debug,
+        )
     except DeepgentError as exc:
         _fail(str(exc), debug=debug, exc=exc)
         return
@@ -668,10 +692,14 @@ def profile_nsight(
     from deepgent.evals import create_run_dir
     from deepgent.evals.nsight import NsightProfiler
 
-    _configure_logging(debug)
+    _configure_logging(debug, quiet=not debug)
     try:
         run_dir = create_run_dir(f"nsight-{board}", Path.cwd())
-        result = asyncio.run(NsightProfiler(board, run_dir).run(command, capture))
+        result = run_async(
+            NsightProfiler(board, run_dir).run(command, capture),
+            "profiling with nsight",
+            spin=not debug,
+        )
     except DeepgentError as exc:
         _fail(str(exc), debug=debug, exc=exc)
         return
@@ -690,7 +718,7 @@ def matrix_query_cmd(
     """Query a cell with transitive inference over the claim set (#14)."""
     from deepgent.knowledge.matrix import load_claims, load_rules, query
 
-    _configure_logging(debug)
+    _configure_logging(debug, quiet=not debug)
     try:
         claim_list = load_claims(claims.read_text())
         rule_set = load_rules(rules.read_text()) if rules else {}
@@ -718,7 +746,7 @@ def matrix_analyze_cmd(
 
     from deepgent.knowledge.matrix import analyze, load_claims, load_rules
 
-    _configure_logging(debug)
+    _configure_logging(debug, quiet=not debug)
     try:
         claim_list = load_claims(claims.read_text())
         rule_set = load_rules(rules.read_text()) if rules else {}
@@ -740,7 +768,7 @@ def skills_eval_cmd(
     """Measure each skill's causal lift and recommend promote/keep/retire (#13)."""
     from deepgent.knowledge.skill_lifecycle import analyze_lifecycle, load_ablation_file
 
-    _configure_logging(debug)
+    _configure_logging(debug, quiet=not debug)
     try:
         records = load_ablation_file(ablation)
         report = analyze_lifecycle(records)
@@ -761,7 +789,7 @@ def reflect_cmd(
     from deepgent.core.reflexion import reflect_with_corpus
     from deepgent.knowledge import build_rag_client
 
-    _configure_logging(debug)
+    _configure_logging(debug, quiet=not debug)
 
     async def _run() -> object:
         client = build_rag_client(load_settings())
@@ -789,7 +817,7 @@ def premortem_cmd(
     from deepgent.knowledge import build_rag_client
     from deepgent.knowledge.premortem import premortem
 
-    _configure_logging(debug)
+    _configure_logging(debug, quiet=not debug)
     stack_dict = dict(kv.split("=", 1) for kv in stack.split(",") if "=" in kv) if stack else None
 
     async def _run() -> object:
@@ -818,7 +846,7 @@ def facts_cmd(
     from deepgent.knowledge.fact_confidence import FactAssertion, arbitrate_all
     from deepgent.telemetry import TelemetryStore
 
-    _configure_logging(debug)
+    _configure_logging(debug, quiet=not debug)
     try:
         raw = json_module.loads(assertions.read_text())
         grouped = {
@@ -851,7 +879,7 @@ def hw_check_cmd(
     """Detect pin/I2C/power conflicts in a carrier-board design (#8)."""
     from deepgent.knowledge.hardware_check import check_conflicts, load_config
 
-    _configure_logging(debug)
+    _configure_logging(debug, quiet=not debug)
     try:
         hw = load_config(config.read_text())
         report = check_conflicts(hw)
@@ -873,12 +901,12 @@ def fleet_cmd(
     """Run a benchmark across a fleet; build a compat+perf matrix (#7)."""
     from deepgent.evals import FleetRunner, create_run_dir, new_run_id
 
-    _configure_logging(debug)
+    _configure_logging(debug, quiet=not debug)
     board_ids = [b.strip() for b in boards.split(",") if b.strip()]
     try:
         run_dir = create_run_dir("fleet", Path.cwd())
         runner = FleetRunner(new_run_id(), run_dir)
-        result = asyncio.run(runner.run(command, board_ids, capture))
+        result = run_async(runner.run(command, board_ids, capture), "running fleet", spin=not debug)
     except DeepgentError as exc:
         _fail(str(exc), debug=debug, exc=exc)
         return
@@ -905,7 +933,7 @@ def shadow_cmd(
     from deepgent.evals import create_run_dir
     from deepgent.evals.shadow import ShadowRunner
 
-    _configure_logging(debug)
+    _configure_logging(debug, quiet=not debug)
     try:
         run_dir = create_run_dir(f"shadow-{board}", Path.cwd())
         runner = ShadowRunner(board, Path.cwd())
@@ -931,12 +959,14 @@ def cuda_check_cmd(
     from deepgent.evals import create_run_dir
     from deepgent.evals.cuda_check import CudaSanitizerRunner
 
-    _configure_logging(debug)
+    _configure_logging(debug, quiet=not debug)
     tool_list = [t.strip() for t in tools.split(",") if t.strip()]
     try:
         run_dir = create_run_dir(f"cuda-{board}", Path.cwd())
         runner = CudaSanitizerRunner(board, run_dir)
-        result = asyncio.run(runner.run(run, build, tool_list))
+        result = run_async(
+            runner.run(run, build, tool_list), "running compute-sanitizer", spin=not debug
+        )
     except DeepgentError as exc:
         _fail(str(exc), debug=debug, exc=exc)
         return
@@ -987,7 +1017,7 @@ def versions_check(
     from deepgent.containers import load_jp6_spec
     from deepgent.knowledge.release_watch import check_releases
 
-    _configure_logging(debug)
+    _configure_logging(debug, quiet=not debug)
     try:
         findings = check_releases(load_jp6_spec().l4t_container)
     except DeepgentError as exc:
@@ -1009,7 +1039,7 @@ def rag_ingest(
     debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
 ) -> None:
     """Chunk a public datasheet and ingest it into the knowledge API."""
-    _configure_logging(debug)
+    _configure_logging(debug, quiet=not debug)
     if not file.is_file():
         _fail(f"{file} does not exist", debug=debug)
     try:
@@ -1057,7 +1087,7 @@ def rag_search(
     debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
 ) -> None:
     """Search the knowledge API and print chunks with provenance."""
-    _configure_logging(debug)
+    _configure_logging(debug, quiet=not debug)
     try:
         settings = load_settings()
         client = build_rag_client(settings)
@@ -1094,7 +1124,7 @@ def rag_triage(
     """Corpus-first debugging: check the failure corpus before any LLM call (Tier 2)."""
     from deepgent.knowledge import triage as run_triage
 
-    _configure_logging(debug)
+    _configure_logging(debug, quiet=not debug)
     try:
         settings = load_settings()
         client = build_rag_client(settings)
@@ -1123,7 +1153,7 @@ def rag_upgrade_check(
     from deepgent.config import load_versions
     from deepgent.knowledge import upgrade_check
 
-    _configure_logging(debug)
+    _configure_logging(debug, quiet=not debug)
     try:
         versions = load_versions()
         jp6 = versions["jetson"]["jp6"]
@@ -1163,7 +1193,7 @@ def scaffold_driver_cmd(
     """Scaffold a RAG-grounded driver skeleton + DT fragment (Tier 3)."""
     from deepgent.generators import scaffold_driver, spec_from_chunks
 
-    _configure_logging(debug)
+    _configure_logging(debug, quiet=not debug)
     try:
         settings = load_settings()
         client = build_rag_client(settings)
@@ -1198,7 +1228,7 @@ def errata_scan_cmd(
 
     from deepgent.knowledge import Erratum, scan_errata
 
-    _configure_logging(debug)
+    _configure_logging(debug, quiet=not debug)
     if not errata_file.is_file():
         _fail(f"{errata_file} does not exist", debug=debug)
     entries = json_module.loads(errata_file.read_text())
@@ -1338,7 +1368,7 @@ def gui_cmd(
     debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
 ) -> None:
     """Launch the desktop GUI (requires the optional 'gui' extra)."""
-    _configure_logging(debug)
+    _configure_logging(debug, quiet=not debug)
     try:
         from deepgent.gui.app import launch
     except ImportError as exc:
@@ -1401,7 +1431,7 @@ def report(
     """Show task telemetry: tokens, cost, loops, and outcomes (section 9)."""
     from deepgent.telemetry import TelemetryStore
 
-    _configure_logging(debug)
+    _configure_logging(debug, quiet=not debug)
     store = TelemetryStore()
     if run_id is not None:
         record = store.get_task(run_id)

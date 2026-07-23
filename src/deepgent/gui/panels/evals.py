@@ -16,6 +16,7 @@ from deepgent.evals import GoldenRunResult, create_run_dir
 from deepgent.evals.soak import SoakResult
 from deepgent.gui.async_bridge import AsyncTask
 from deepgent.gui.controllers.operations import EvalsController
+from deepgent.gui.widgets.animations import Spinner, bind_spinner
 from deepgent.gui.widgets.common import LogView, toolbar_button
 
 
@@ -66,6 +67,11 @@ class EvalsPanel(QWidget):
 
         self._log = LogView()
         root.addWidget(self._log, 1)
+
+        self._spinner = Spinner()
+        bind_spinner(self._golden, self._spinner)
+        bind_spinner(self._soak, self._spinner)
+        root.addWidget(self._spinner)
 
         self._golden.failed.connect(lambda m: self._log.append_line(f"[error] {m}"))
         self._soak.failed.connect(lambda m: self._log.append_line(f"[error] {m}"))

@@ -22,6 +22,7 @@ class AsyncTask(QObject):
     done(): emitted after either outcome (success, failure, or cancel).
     """
 
+    started = Signal()
     finished = Signal(object)
     failed = Signal(str)
     done = Signal()
@@ -39,6 +40,7 @@ class AsyncTask(QObject):
         if self.running:
             raise RuntimeError("AsyncTask is already running")
         self._task = asyncio.ensure_future(self._runner(coro_factory))
+        self.started.emit()
 
     def cancel(self) -> None:
         if self._task is not None and not self._task.done():

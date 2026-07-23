@@ -78,10 +78,17 @@ class CheckRow(QWidget):
 
 
 def toolbar_button(text: str, role: str | None = None) -> QPushButton:
-    """A compact button, optionally styled 'accent' or 'danger'."""
+    """A compact button, optionally styled 'accent' or 'danger'.
+
+    Accent and danger buttons get a soft glow that animates in on hover.
+    """
     button = QPushButton(text)
     if role:
         button.setProperty("role", role)
+        if role in ("accent", "danger"):
+            from deepgent.gui.widgets.animations import attach_hover_glow
+
+            attach_hover_glow(button)
     return button
 
 

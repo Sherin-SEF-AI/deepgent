@@ -17,6 +17,7 @@ from deepgent.evals.model_selector import Constraint, SelectionResult
 from deepgent.evals.quant_sweep import QuantSweepResult, select_best
 from deepgent.gui.async_bridge import AsyncTask
 from deepgent.gui.controllers.operations import ModelsController
+from deepgent.gui.widgets.animations import Spinner, bind_spinner
 from deepgent.gui.widgets.common import LogView, toolbar_button
 
 
@@ -97,6 +98,12 @@ class ModelsPanel(QWidget):
 
         self._log = LogView()
         root.addWidget(self._log, 1)
+
+        self._spinner = Spinner()
+        bind_spinner(self._sweep, self._spinner)
+        bind_spinner(self._acc, self._spinner)
+        bind_spinner(self._select, self._spinner)
+        root.addWidget(self._spinner)
 
         for task in (self._sweep, self._acc, self._select):
             task.failed.connect(lambda m: self._log.append_line(f"[error] {m}"))
