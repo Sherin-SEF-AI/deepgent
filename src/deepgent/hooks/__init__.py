@@ -4,6 +4,7 @@ budgets, and telemetry taps."""
 from deepgent.hooks.budget_guard import make_budget_guard
 from deepgent.hooks.cuda_gate import is_cuda_file, make_cuda_gate
 from deepgent.hooks.misra_gate import Finding, is_gated_file, make_misra_gate
+from deepgent.hooks.reflexion_tap import make_reflexion_tap
 from deepgent.hooks.registry import build_hooks
 from deepgent.hooks.safety_gate import (
     BOARD_FARM_TOOL_PREFIX,
@@ -24,6 +25,7 @@ __all__ = [
     "make_budget_guard",
     "make_cuda_gate",
     "make_misra_gate",
+    "make_reflexion_tap",
     "make_safety_gate",
     "scope_lock",
 ]

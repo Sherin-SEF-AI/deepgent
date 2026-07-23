@@ -16,11 +16,15 @@ from claude_agent_sdk.types import (
     SyncHookJSONOutput,
 )
 
+from deepgent.knowledge.fact_confidence import confidence_for
 from deepgent.knowledge.rag import PROVENANCE_FIELDS
 
 _logger = structlog.get_logger(__name__)
 
 KNOWLEDGE_TOOL_PREFIX = "mcp__knowledge__"
+# Surviving RAG facts are datasheet-grounded; their calibrated confidence tier
+# (#12). Empirical on-target verification is the only thing that reaches 1.0.
+_RAG_CONFIDENCE = confidence_for("datasheet_rag")
 
 
 def has_provenance(chunk: dict[str, Any]) -> bool:
@@ -78,7 +82,8 @@ async def fact_guard(
     note = (
         f"fact_guard removed {stripped} result(s) lacking provenance "
         f"({', '.join(PROVENANCE_FIELDS)}); treat missing facts as unknown, "
-        "never guess them"
+        f"never guess them. Surviving facts are datasheet-grounded (confidence "
+        f"~{_RAG_CONFIDENCE:.1f}); only on-target verification raises that to 1.0"
     )
     return {
         "hookSpecificOutput": {

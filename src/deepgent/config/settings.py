@@ -103,6 +103,9 @@ class DeepgentSettings(BaseSettings):
     permission_mode: PermissionMode = "default"
     max_turns: int = 50
     ci: bool = False
+    # Gather a corpus/matrix pre-mortem during context assembly and prepend it
+    # to the task (#11). No-ops gracefully when the knowledge layer is absent.
+    premortem_enabled: bool = True
 
 
 class _MappingSource(PydanticBaseSettingsSource):

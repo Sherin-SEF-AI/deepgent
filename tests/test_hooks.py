@@ -232,9 +232,16 @@ def _post_tool_use_input() -> dict[str, Any]:
 
 class TestRegistry:
     @pytest.mark.unit
-    def test_all_three_hooks_registered(self, settings: DeepgentSettings) -> None:
+    def test_core_hooks_registered(self, settings: DeepgentSettings) -> None:
         hooks = build_hooks(settings, BudgetTracker(settings))
-        assert set(hooks) == {"UserPromptSubmit", "PreToolUse", "PostToolUse"}
+        # reflexion_tap runs on every session, so PostToolUseFailure is always
+        # present even without a telemetry store.
+        assert set(hooks) == {
+            "UserPromptSubmit",
+            "PreToolUse",
+            "PostToolUse",
+            "PostToolUseFailure",
+        }
         pre = hooks["PreToolUse"][0]
         assert pre.matcher == "mcp__board_farm__.*"
         for matchers in hooks.values():

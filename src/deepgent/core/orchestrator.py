@@ -78,6 +78,35 @@ class Orchestrator:
         store = self._telemetry_store()
         return store.estimate_calibration() if store is not None else 1.0
 
+    async def _with_premortem(self, task: str) -> str:
+        """Prepend a corpus/matrix pre-mortem to the task (#11).
+
+        Best-effort: any failure to reach the knowledge layer leaves the task
+        unchanged, so a missing or unconfigured server never blocks a run.
+        """
+        if not self._settings.premortem_enabled:
+            return task
+        from deepgent.knowledge import build_rag_client
+        from deepgent.knowledge.premortem import premortem
+
+        try:
+            client = build_rag_client(self._settings)
+        except Exception as exc:  # knowledge layer unconfigured or unavailable
+            _logger.debug("premortem_skipped", reason=str(exc))
+            return task
+        try:
+            report = await premortem(client, task, hw=self._settings.default_board)
+            prelude = report.plan_prelude()
+        except Exception as exc:  # best-effort enrichment, never fatal
+            _logger.debug("premortem_failed", reason=str(exc))
+            return task
+        finally:
+            await client.aclose()
+        if not prelude:
+            return task
+        _logger.info("premortem_applied", risks=len(report.risks))
+        return f"{prelude}\n{task}"
+
     def build_options(self, tracker: BudgetTracker | None = None) -> ClaudeAgentOptions:
         """Session options with every field from CLAUDE.md section 7 set
         explicitly; nothing relies on ambient defaults."""
@@ -134,8 +163,10 @@ class Orchestrator:
         log.info("task_started", task=task)
         started = time.monotonic()
 
+        prompt = await self._with_premortem(task)
+
         result: ResultMessage | None = None
-        async for message in _run_query(prompt=task, options=options):
+        async for message in _run_query(prompt=prompt, options=options):
             if isinstance(message, AssistantMessage):
                 tracker.record_usage(message.model, message.usage)
                 for block in message.content:
