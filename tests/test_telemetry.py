@@ -54,6 +54,60 @@ class TestStore:
         assert store.task_records()[0].id == "sess-1"
 
     @pytest.mark.unit
+    def test_migrates_legacy_db_without_est_usd(self, tmp_path: Path) -> None:
+        import sqlite3
+
+        db = tmp_path / "legacy.db"
+        conn = sqlite3.connect(db)
+        conn.executescript(
+            "CREATE TABLE task_records (id TEXT PRIMARY KEY, ts REAL NOT NULL, "
+            "task_class TEXT NOT NULL, board TEXT, model_mix TEXT NOT NULL, "
+            "tokens INTEGER NOT NULL, usd REAL, wall_s REAL NOT NULL, "
+            "loops INTEGER NOT NULL, outcome TEXT NOT NULL, failure_tag TEXT, "
+            "artifacts_path TEXT);"
+        )
+        conn.commit()
+        conn.close()
+        # Opening the store must add est_usd without losing the legacy table.
+        store = TelemetryStore(db)
+        cols = {row[1] for row in store._conn.execute("PRAGMA table_info(task_records)")}
+        assert "est_usd" in cols
+        store.record_task(_task_record(usd=0.1, est_usd=0.2))
+        loaded = store.get_task("sess-1")
+        assert loaded is not None and loaded.est_usd == pytest.approx(0.2)
+        store.close()
+
+    @pytest.mark.unit
+    def test_est_usd_round_trips(self, store: TelemetryStore) -> None:
+        store.record_task(_task_record(usd=0.12, est_usd=0.24))
+        loaded = store.get_task("sess-1")
+        assert loaded is not None
+        assert loaded.usd == pytest.approx(0.12)
+        assert loaded.est_usd == pytest.approx(0.24)
+
+    @pytest.mark.unit
+    def test_calibration_defaults_to_one_when_sparse(self, store: TelemetryStore) -> None:
+        store.record_task(_task_record(id="a", usd=0.10, est_usd=0.20))
+        # Only one calibrated sample: below min, so stay conservative at 1.0.
+        assert store.estimate_calibration() == pytest.approx(1.0)
+
+    @pytest.mark.unit
+    def test_calibration_is_median_billed_over_estimate(self, store: TelemetryStore) -> None:
+        for i, (usd, est) in enumerate([(0.10, 0.20), (0.15, 0.30), (0.30, 0.30)]):
+            store.record_task(_task_record(id=f"c{i}", usd=usd, est_usd=est))
+        # ratios: 0.5, 0.5, 1.0 -> median 0.5
+        assert store.estimate_calibration() == pytest.approx(0.5)
+
+    @pytest.mark.unit
+    def test_calibration_ignores_failed_and_incomplete(self, store: TelemetryStore) -> None:
+        store.record_task(_task_record(id="ok1", usd=0.10, est_usd=0.20))
+        store.record_task(_task_record(id="ok2", usd=0.10, est_usd=0.20))
+        store.record_task(_task_record(id="ok3", usd=0.10, est_usd=0.20))
+        store.record_task(_task_record(id="fail", outcome="error", usd=9.0, est_usd=0.01))
+        store.record_task(_task_record(id="noest", usd=0.5, est_usd=None))
+        assert store.estimate_calibration() == pytest.approx(0.5)
+
+    @pytest.mark.unit
     def test_records_are_sanitized(self, store: TelemetryStore) -> None:
         store.record_task(
             _task_record(outcome="failed: ssh nvidia@192.168.1.44 with key /home/jo/.ssh/orin")

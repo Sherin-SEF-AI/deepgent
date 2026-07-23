@@ -73,6 +73,11 @@ class Orchestrator:
             self._store = TelemetryStore()
         return self._store
 
+    def _budget_calibration(self) -> float:
+        """Learned billed/estimate ratio for budget_guard; 1.0 without history."""
+        store = self._telemetry_store()
+        return store.estimate_calibration() if store is not None else 1.0
+
     def build_options(self, tracker: BudgetTracker | None = None) -> ClaudeAgentOptions:
         """Session options with every field from CLAUDE.md section 7 set
         explicitly; nothing relies on ambient defaults."""
@@ -123,7 +128,7 @@ class Orchestrator:
         """
         import time
 
-        tracker = BudgetTracker(self._settings)
+        tracker = BudgetTracker(self._settings, calibration=self._budget_calibration())
         options = self.build_options(tracker)
         log = _logger.bind(cwd=str(self._cwd), model=options.model)
         log.info("task_started", task=task)
@@ -182,6 +187,7 @@ class Orchestrator:
                 model_mix=tracker.model_mix,
                 tokens=tracker.total_tokens,
                 usd=result.total_cost_usd,
+                est_usd=tracker.spent_usd,
                 wall_s=wall_s,
                 loops=result.num_turns,
                 outcome="error" if result.is_error else "success",

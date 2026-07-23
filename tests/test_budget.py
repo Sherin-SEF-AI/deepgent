@@ -80,3 +80,23 @@ def test_cap_comes_from_budget_settings(settings: DeepgentSettings) -> None:
     custom.budget.per_task_usd = 0.10
     tracker = BudgetTracker(custom)
     assert tracker.cap_usd == 0.10
+
+
+@pytest.mark.unit
+def test_calibration_scales_halt_decision(settings: DeepgentSettings) -> None:
+    # A cool calibration (billed < estimate) lets a hot estimate run further.
+    tracker = BudgetTracker(settings, calibration=0.5)
+    tracker.spent_usd = HALT_FRACTION * tracker.cap_usd  # would halt at 1.0
+    assert not tracker.halt_needed
+    assert tracker.effective_spent_usd == pytest.approx(0.5 * tracker.spent_usd)
+    tracker.spent_usd = 2 * HALT_FRACTION * tracker.cap_usd
+    assert tracker.halt_needed
+
+
+@pytest.mark.unit
+def test_calibration_is_clamped(settings: DeepgentSettings) -> None:
+    # Pathological factors are pulled into the safe band; non-positive -> 1.0.
+    assert BudgetTracker(settings, calibration=100.0).calibration == pytest.approx(4.0)
+    assert BudgetTracker(settings, calibration=0.001).calibration == pytest.approx(0.25)
+    assert BudgetTracker(settings, calibration=0.0).calibration == pytest.approx(1.0)
+    assert BudgetTracker(settings, calibration=-3.0).calibration == pytest.approx(1.0)

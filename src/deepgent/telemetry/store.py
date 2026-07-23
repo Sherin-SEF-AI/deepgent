@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS task_records (
     model_mix TEXT NOT NULL,
     tokens INTEGER NOT NULL,
     usd REAL,
+    est_usd REAL,
     wall_s REAL NOT NULL,
     loops INTEGER NOT NULL,
     outcome TEXT NOT NULL,
@@ -89,6 +90,9 @@ class TaskRecord:
     wall_s: float
     loops: int
     outcome: str
+    # Raw token-priced estimate at task end; billed usd/est_usd feeds the
+    # budget-guard calibration. None on records written before this field.
+    est_usd: float | None = None
     failure_tag: str | None = None
     artifacts_path: str | None = None
 
@@ -132,6 +136,14 @@ class TelemetryStore:
         self._conn = sqlite3.connect(str(path), check_same_thread=False)
         self._lock = threading.Lock()
         self._conn.executescript(_SCHEMA)
+        self._migrate()
+
+    def _migrate(self) -> None:
+        """Additive migrations for databases created by older versions."""
+        cols = {row[1] for row in self._conn.execute("PRAGMA table_info(task_records)")}
+        if "est_usd" not in cols:
+            self._conn.execute("ALTER TABLE task_records ADD COLUMN est_usd REAL")
+            self._conn.commit()
 
     def close(self) -> None:
         self._conn.close()
@@ -145,10 +157,11 @@ class TelemetryStore:
         with self._lock:
             self._conn.execute(
                 "INSERT OR REPLACE INTO task_records "
-                "(id, ts, task_class, board, model_mix, tokens, usd, wall_s, "
-                "loops, outcome, failure_tag, artifacts_path) "
+                "(id, ts, task_class, board, model_mix, tokens, usd, est_usd, "
+                "wall_s, loops, outcome, failure_tag, artifacts_path) "
                 "VALUES (:id, :ts, :task_class, :board, :model_mix, :tokens, "
-                ":usd, :wall_s, :loops, :outcome, :failure_tag, :artifacts_path)",
+                ":usd, :est_usd, :wall_s, :loops, :outcome, :failure_tag, "
+                ":artifacts_path)",
                 data,
             )
             self._conn.commit()
@@ -238,7 +251,7 @@ class TelemetryStore:
         with self._lock:
             rows = self._conn.execute(
                 "SELECT id, ts, task_class, board, model_mix, tokens, usd, "
-                "wall_s, loops, outcome, failure_tag, artifacts_path "
+                "est_usd, wall_s, loops, outcome, failure_tag, artifacts_path "
                 "FROM task_records ORDER BY ts DESC LIMIT ?",
                 (limit,),
             ).fetchall()
@@ -248,11 +261,34 @@ class TelemetryStore:
         with self._lock:
             row = self._conn.execute(
                 "SELECT id, ts, task_class, board, model_mix, tokens, usd, "
-                "wall_s, loops, outcome, failure_tag, artifacts_path "
+                "est_usd, wall_s, loops, outcome, failure_tag, artifacts_path "
                 "FROM task_records WHERE id = ?",
                 (task_id,),
             ).fetchone()
         return self._row_to_record(row) if row else None
+
+    def estimate_calibration(self, window: int = 25, min_samples: int = 3) -> float:
+        """Median billed/estimate ratio over recent successful tasks.
+
+        Only tasks that carry both a billed usd and a positive est_usd count.
+        Returns 1.0 until at least min_samples exist, so the halt decision
+        stays conservative on a cold store.
+        """
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT usd, est_usd FROM task_records "
+                "WHERE outcome = 'success' AND usd IS NOT NULL "
+                "AND est_usd IS NOT NULL AND est_usd > 0 "
+                "ORDER BY ts DESC LIMIT ?",
+                (window,),
+            ).fetchall()
+        ratios = sorted(float(usd) / float(est) for usd, est in rows if usd is not None and est)
+        if len(ratios) < min_samples:
+            return 1.0
+        mid = len(ratios) // 2
+        if len(ratios) % 2:
+            return ratios[mid]
+        return (ratios[mid - 1] + ratios[mid]) / 2.0
 
     @staticmethod
     def _row_to_record(row: tuple[Any, ...]) -> TaskRecord:
@@ -264,11 +300,12 @@ class TelemetryStore:
             model_mix=json.loads(row[4]),
             tokens=row[5],
             usd=row[6],
-            wall_s=row[7],
-            loops=row[8],
-            outcome=row[9],
-            failure_tag=row[10],
-            artifacts_path=row[11],
+            est_usd=row[7],
+            wall_s=row[8],
+            loops=row[9],
+            outcome=row[10],
+            failure_tag=row[11],
+            artifacts_path=row[12],
         )
 
 

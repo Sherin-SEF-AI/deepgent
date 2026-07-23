@@ -12,6 +12,16 @@ from deepgent.errors import ConfigError
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
+@pytest.fixture(autouse=True)
+def _isolate_user_config(
+    tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Point HOME at an empty dir so a developer's real ~/.deepgent/config.toml
+    (written by `deepgent setup`) never leaks into these precedence tests.
+    Tests that need a user config set HOME again, overriding this."""
+    monkeypatch.setenv("HOME", str(tmp_path_factory.mktemp("empty-home")))
+
+
 def _versions_models() -> dict[str, str]:
     with (REPO_ROOT / "versions.toml").open("rb") as f:
         models: dict[str, str] = tomllib.load(f)["models"]
