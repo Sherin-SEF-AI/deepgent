@@ -41,6 +41,9 @@ model/performance analysis, compatibility reasoning, and knowledge.
 | **Model / performance analysis** | **Compatibility-matrix reasoning** |
 | ![Models](docs/img/panel-models.png) | ![Matrix](docs/img/panel-matrix.png) |
 
+<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/69f82e12-6840-45bf-95f1-a12ec1466cc3" />
+
+
 ## Capabilities
 
 Every feature has a deterministic analysis core (unit-tested without hardware);
