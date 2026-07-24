@@ -1459,6 +1459,31 @@ def setup(
             typer.echo("registered target 'local' (run tasks on this machine directly)")
 
 
+@app.command("mcp")
+def mcp_cmd(
+    allow_task: bool = typer.Option(
+        False, "--allow-task", help="Expose run_task (costs API, edits files)."
+    ),
+    transport: str = typer.Option("stdio", "--transport", help="stdio, sse, or streamable-http."),
+    debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
+) -> None:
+    """Run deepgent as an MCP server so a Claude client can call its tools.
+
+    Register with Claude Code:  claude mcp add deepgent -- deepgent mcp
+    Or add to Claude Desktop's config under mcpServers. Do not print to stdout
+    here; the stdio transport owns it.
+    """
+    # Logs go to stderr; stdout is the MCP protocol channel.
+    _configure_logging(debug, quiet=not debug)
+    try:
+        from deepgent.mcp_server import build_server
+    except ImportError as exc:  # mcp ships with claude-agent-sdk; guard anyway
+        _fail(f"the mcp package is not available: {exc}", debug=debug)
+        return
+    server = build_server(allow_task=allow_task)
+    server.run(transport=transport)  # type: ignore[arg-type]
+
+
 @app.command("gui")
 def gui_cmd(
     debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
