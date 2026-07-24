@@ -34,6 +34,26 @@ _TAG_ADVICE: dict[str, str] = {
 }
 _UNCLASSIFIED_ADVICE = "inspect the raw error, isolate the smallest failing step, and address it"
 
+# How urgent each failure class is; drives whether evidence is captured first.
+_TAG_SEVERITY: dict[str, str] = {
+    "build_toolchain": "medium",
+    "build_deps": "low",
+    "static_analysis": "medium",
+    "unit_test": "medium",
+    "deploy_ssh": "medium",
+    "runtime_crash": "high",
+    "perf_miss": "medium",
+    "accuracy_miss": "high",
+    "thermal": "high",
+    "flaky_hw": "high",
+    "knowledge_gap": "low",
+    "harness_bug": "high",
+}
+_HIGH_SEVERITY_EVIDENCE = (
+    "capture the failing state first (dmesg tail, the tegrastats window, and the "
+    "run artifacts) before changing anything, so the fix is verified against evidence"
+)
+
 
 @dataclass(frozen=True)
 class ReplanStep:
@@ -61,9 +81,15 @@ class Reflexion:
         """True when at least one step is grounded in a verified prior fix."""
         return any(step.from_corpus for step in self.steps)
 
+    @property
+    def severity(self) -> str:
+        """How urgent this failure class is (low | medium | high)."""
+        return _TAG_SEVERITY.get(self.failure_tag or "", "medium")
+
     def to_dict(self) -> dict[str, object]:
         return {
             "failure_tag": self.failure_tag,
+            "severity": self.severity,
             "targeted": self.targeted,
             "corpus_match": self.corpus_match,
             "steps": [
@@ -75,7 +101,7 @@ class Reflexion:
     def render(self) -> str:
         lines = [
             "# reflexion",
-            f"failure class: {self.failure_tag or 'unclassified'}",
+            f"failure class: {self.failure_tag or 'unclassified'} (severity: {self.severity})",
             f"targeted: {'yes (corpus-grounded)' if self.targeted else 'no (heuristic)'}",
             "",
             "replan:",
@@ -94,6 +120,16 @@ def reflect(
     """
     tag = classify_failure(tool_name, error)
     reflexion = Reflexion(failure_tag=tag)
+    # High-severity failures get an evidence-capture step first, so the fix is
+    # verified against a snapshot rather than a vanished state.
+    if _TAG_SEVERITY.get(tag or "", "medium") == "high":
+        reflexion.steps.append(
+            ReplanStep(
+                action=_HIGH_SEVERITY_EVIDENCE,
+                rationale=f"failure class '{tag}' is high-severity; do not lose the failing state",
+                from_corpus=False,
+            )
+        )
     match = corpus_tuples[0] if corpus_tuples else None
     if match is not None:
         reflexion.corpus_match = match

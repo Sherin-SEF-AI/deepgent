@@ -137,3 +137,21 @@ def test_reflect_with_corpus() -> None:
     reflexion = asyncio.run(reflect_with_corpus(client, "Bash", "boom"))  # type: ignore[arg-type]
     assert reflexion.targeted is True
     assert reflexion.corpus_match is not None
+
+
+# --- WO-43 reflexion depth: severity + evidence-first -----------------------
+
+
+def test_reflexion_severity_and_evidence_step() -> None:
+    high = reflect("Bash", "thermal shutdown: tj exceeded")
+    assert high.failure_tag == "thermal"
+    assert high.severity == "high"
+    # High severity prepends an evidence-capture step before any fix.
+    assert high.steps[0].action.startswith("capture the failing state")
+    assert "severity: high" in high.render()
+
+
+def test_reflexion_low_severity_no_evidence_step() -> None:
+    low = reflect("Bash", "pytest failed: 1 test failed")  # unit_test -> medium
+    assert low.severity == "medium"
+    assert not low.steps[0].action.startswith("capture the failing state")

@@ -71,6 +71,8 @@ profile_app = typer.Typer(help="On-target performance and latency profiling.")
 app.add_typer(profile_app, name="profile")
 accuracy_app = typer.Typer(help="Closed-loop accuracy validation and scoring.")
 app.add_typer(accuracy_app, name="accuracy")
+generate_app = typer.Typer(help="Deterministic code generators (ROS 2, systemd).")
+app.add_typer(generate_app, name="generate")
 
 _PROJECT_MD = """\
 # deepgent project state
@@ -873,6 +875,67 @@ def facts_cmd(
     typer.echo(report.render())
     if report.conflicts:
         raise typer.Exit(code=1)
+
+
+@generate_app.command("ros2-node")
+def generate_ros2_node(
+    package: str = typer.Option(..., "--package", help="ROS 2 package name."),
+    node: str = typer.Option(..., "--node", help="Node name."),
+    sub: str = typer.Option("input", "--sub", help="Subscribed topic."),
+    pub: str = typer.Option("output", "--pub", help="Published topic."),
+    out: Path | None = typer.Option(None, "--out", help="Output directory (default cwd)."),
+    debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
+) -> None:
+    """Scaffold a buildable ament_python ROS 2 node package."""
+    from deepgent.generators import Ros2NodeSpec, scaffold_ros2_node
+
+    _configure_logging(debug, quiet=not debug)
+    try:
+        output = scaffold_ros2_node(
+            Ros2NodeSpec(package=package, node=node, sub_topic=sub, pub_topic=pub)
+        )
+        written = output.write(out if out is not None else Path.cwd())
+    except (DeepgentError, OSError, ValueError) as exc:
+        _fail(str(exc), debug=debug, exc=exc if isinstance(exc, DeepgentError) else None)
+        return
+    for path in written:
+        typer.echo(f"wrote {path}")
+    for todo in output.todos:
+        typer.secho(f"next: {todo}", fg=typer.colors.YELLOW)
+
+
+@generate_app.command("systemd")
+def generate_systemd(
+    name: str = typer.Option(..., "--name", help="Service name (without .service)."),
+    exec_start: str = typer.Option(..., "--exec", help="ExecStart command."),
+    description: str = typer.Option("", "--description", help="Unit description."),
+    user: str | None = typer.Option(None, "--user", help="Run as this user."),
+    watchdog: int | None = typer.Option(None, "--watchdog", help="WatchdogSec (Type=notify)."),
+    out: Path | None = typer.Option(None, "--out", help="Output directory (default cwd)."),
+    debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
+) -> None:
+    """Scaffold a hardened systemd .service unit with restart and watchdog."""
+    from deepgent.generators import SystemdUnitSpec, scaffold_systemd_unit
+
+    _configure_logging(debug, quiet=not debug)
+    try:
+        output = scaffold_systemd_unit(
+            SystemdUnitSpec(
+                name=name,
+                exec_start=exec_start,
+                description=description,
+                user=user,
+                watchdog_sec=watchdog,
+            )
+        )
+        written = output.write(out if out is not None else Path.cwd())
+    except (DeepgentError, OSError, ValueError) as exc:
+        _fail(str(exc), debug=debug, exc=exc if isinstance(exc, DeepgentError) else None)
+        return
+    for path in written:
+        typer.echo(f"wrote {path}")
+    for todo in output.todos:
+        typer.secho(f"next: {todo}", fg=typer.colors.YELLOW)
 
 
 @app.command("hw-check")
