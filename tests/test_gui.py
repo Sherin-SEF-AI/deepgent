@@ -114,6 +114,17 @@ def test_theme_qss_is_nonempty() -> None:
     assert isinstance(QSS, str) and "QWidget" in QSS
 
 
+def test_bar_chart_paints(qapp: QApplication) -> None:
+    from deepgent.gui.widgets.charts import BarChart
+
+    chart = BarChart("cost")
+    chart.resize(200, 90)
+    chart.set_values([])  # empty renders "no data" without crashing
+    chart.grab()
+    chart.set_values([0.1, 0.25, 0.05, 0.3])
+    assert isinstance(chart.grab(), object)
+
+
 def test_every_panel_constructs(qapp: QApplication, tmp_path: Path) -> None:
     """Each panel builds offscreen with its default controller."""
     from deepgent.gui.panels.boards import BoardsPanel

@@ -1,6 +1,6 @@
 """Telemetry controller: task records and corpus candidates. Qt-free."""
 
-from deepgent.telemetry import TaskRecord, TelemetryStore
+from deepgent.telemetry import TaskRecord, TelemetryStore, TelemetrySummary
 
 
 class TelemetryController:
@@ -17,3 +17,11 @@ class TelemetryController:
 
     def get(self, task_id: str) -> TaskRecord | None:
         return self._get_store().get_task(task_id)
+
+    def summary(self) -> TelemetrySummary:
+        return self._get_store().summary()
+
+    def recent_costs(self, limit: int = 30) -> list[float]:
+        """Per-task billed cost, oldest-first, for a mini chart (0.0 if unknown)."""
+        records = self._get_store().task_records(limit=limit)
+        return [r.usd or 0.0 for r in reversed(records)]

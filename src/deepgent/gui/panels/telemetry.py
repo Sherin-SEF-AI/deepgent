@@ -3,6 +3,7 @@
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
+    QLabel,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -10,6 +11,7 @@ from PySide6.QtWidgets import (
 )
 
 from deepgent.gui.controllers.telemetry import TelemetryController
+from deepgent.gui.widgets.charts import BarChart
 from deepgent.gui.widgets.common import toolbar_button
 
 _COLUMNS = ("id", "class", "board", "outcome", "loops", "tokens", "usd", "wall_s")
@@ -27,9 +29,14 @@ class TelemetryPanel(QWidget):
         actions = QHBoxLayout()
         refresh = toolbar_button("Refresh")
         refresh.clicked.connect(self.refresh)
+        self._summary = QLabel("")
+        self._summary.setProperty("role", "dim")
         actions.addWidget(refresh)
-        actions.addStretch(1)
+        actions.addWidget(self._summary, 1)
         root.addLayout(actions)
+
+        self._chart = BarChart("cost per task (recent, oldest -> newest)")
+        root.addWidget(self._chart)
 
         self._table = QTableWidget(0, len(_COLUMNS))
         self._table.setHorizontalHeaderLabels(_COLUMNS)
@@ -42,6 +49,12 @@ class TelemetryPanel(QWidget):
         self.refresh()
 
     def refresh(self) -> None:
+        summary = self._controller.summary()
+        self._summary.setText(
+            f"{summary.tasks} tasks  |  {summary.success_rate:.0%} ok  |  "
+            f"${summary.total_usd:.2f}  |  budget calibration x{summary.budget_calibration:.2f}"
+        )
+        self._chart.set_values(self._controller.recent_costs())
         records = self._controller.records()
         self._table.setRowCount(len(records))
         for r, rec in enumerate(records):
