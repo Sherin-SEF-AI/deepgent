@@ -28,8 +28,16 @@ class TaskController:
         on_event: Callable[[TaskEvent], None] | None = None,
         ci: bool = True,
     ) -> TaskOutcome:
-        """Run task to completion. ci=True auto-denies gated board ops."""
-        settings = load_settings().model_copy(update={"ci": ci}, deep=True)
+        """Run task to completion.
+
+        Uses permission_mode='acceptEdits' so the agent can write and edit
+        files without an interactive approver (there is none in the GUI); the
+        safety_gate still gates destructive board operations. ci=True
+        auto-denies non-whitelisted gated board ops.
+        """
+        settings = load_settings().model_copy(
+            update={"ci": ci, "permission_mode": "acceptEdits"}, deep=True
+        )
         if budget is not None:
             settings.budget.per_task_usd = budget
         orchestrator = Orchestrator(settings=settings, cwd=self._cwd)
