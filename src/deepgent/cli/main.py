@@ -242,6 +242,31 @@ def boards_list() -> None:
         )
 
 
+@boards_app.command("catalog")
+def boards_catalog(
+    board_id: str | None = typer.Argument(None, help="Show one profile in detail."),
+    family: str | None = typer.Option(None, "--family", help="Filter: jetson, raspberry-pi, ..."),
+) -> None:
+    """Browse the supported board-type catalog (categorical; verify specs per board)."""
+    from deepgent.boards import get_profile, list_catalog, render_catalog, suggest_capabilities
+
+    if board_id is not None:
+        profile = get_profile(board_id)
+        if profile is None:
+            _fail(f"unknown board type '{board_id}'; run 'deepgent boards catalog'", debug=False)
+            return
+        typer.echo(f"id:           {profile.id}")
+        typer.echo(f"name:         {profile.name}")
+        typer.echo(f"family:       {profile.family}")
+        typer.echo(f"toolchain:    {profile.toolchain}")
+        typer.echo(f"accelerator:  {profile.accelerator}")
+        typer.echo(f"interfaces:   {', '.join(profile.interfaces)}")
+        typer.echo(f"capabilities: {', '.join(suggest_capabilities(profile.id))}")
+        typer.secho(f"verify:       {profile.verify}", fg=typer.colors.YELLOW)
+        return
+    typer.echo(render_catalog(list_catalog(family)))
+
+
 @boards_app.command("test")
 def boards_test(
     board_id: str = typer.Argument(..., help="Board id to test."),

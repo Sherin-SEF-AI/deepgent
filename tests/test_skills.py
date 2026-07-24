@@ -111,6 +111,10 @@ class TestRepoSkills:
             "power-thermal-tuning",
             "sensor-latency-tracing",
             "failure-triage",
+            "raspberry-pi-edge-ai",
+            "hailo-ai-accelerator",
+            "multi-board-portability",
+            "camera-module-selection",
         }
         for pack in packs:
             body = (pack.path / "SKILL.md").read_text()
