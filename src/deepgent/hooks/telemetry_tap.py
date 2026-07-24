@@ -62,14 +62,19 @@ def make_telemetry_tap(store: TelemetryStore, board: str | None = None) -> Any:
             failures = store.failures_for_session(session_id)
             if failures:
                 # The session finished after earlier failures: draft a
-                # candidate tuple from the first symptom (docs/schemas.md).
+                # candidate tuple from the first symptom (docs/schemas.md). The
+                # classified failure tag seeds root_cause so the owner reviews a
+                # started, not blank, draft.
+                first = failures[0]
+                tag = first.failure_tag or classify_failure(first.tool_name, first.error)
                 store.draft_corpus_candidate(
                     CorpusCandidate(
                         session_id=session_id,
                         ts=now(),
-                        symptom=failures[0].error,
+                        symptom=first.error,
                         hw_config=board,
                         versions=_session_versions(),
+                        root_cause=f"classified as {tag}" if tag else "",
                     )
                 )
         return {}

@@ -104,6 +104,41 @@ class TaskRecord:
 
 
 @dataclass(frozen=True)
+class TelemetrySummary:
+    """Aggregate flywheel stats over all recorded tasks."""
+
+    tasks: int
+    successes: int
+    total_usd: float
+    mean_loops: float
+    mean_wall_s: float
+    total_tokens: int
+    budget_calibration: float
+    fact_reliability: dict[str, float]
+
+    @property
+    def success_rate(self) -> float:
+        return self.successes / self.tasks if self.tasks else 0.0
+
+    def render(self) -> str:
+        lines = [
+            "# telemetry summary",
+            f"tasks:            {self.tasks}",
+            f"success rate:     {self.success_rate:.0%}",
+            f"total spend:      ${self.total_usd:.2f}",
+            f"total tokens:     {self.total_tokens}",
+            f"mean loops:       {self.mean_loops:.1f}",
+            f"mean wall:        {self.mean_wall_s:.1f}s",
+            f"budget calibration: x{self.budget_calibration:.2f} "
+            f"({'learned' if abs(self.budget_calibration - 1.0) > 1e-9 else 'cold, default'})",
+        ]
+        if self.fact_reliability:
+            reliab = ", ".join(f"{k}={v:.2f}" for k, v in sorted(self.fact_reliability.items()))
+            lines.append(f"fact reliability: {reliab}")
+        return "\n".join(lines) + "\n"
+
+
+@dataclass(frozen=True)
 class FailureEvent:
     """One failed tool call inside a session."""
 
@@ -271,6 +306,29 @@ class TelemetryStore:
             )
             for row in rows
         ]
+
+    def summary(self) -> "TelemetrySummary":
+        """Aggregate task stats plus the learned flywheel calibrations."""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT COUNT(*), "
+                "SUM(CASE WHEN outcome = 'success' THEN 1 ELSE 0 END), "
+                "COALESCE(SUM(usd), 0.0), COALESCE(AVG(loops), 0.0), "
+                "COALESCE(AVG(wall_s), 0.0), COALESCE(SUM(tokens), 0) "
+                "FROM task_records"
+            ).fetchone()
+        tasks = int(row[0] or 0)
+        successes = int(row[1] or 0)
+        return TelemetrySummary(
+            tasks=tasks,
+            successes=successes,
+            total_usd=float(row[2] or 0.0),
+            mean_loops=float(row[3] or 0.0),
+            mean_wall_s=float(row[4] or 0.0),
+            total_tokens=int(row[5] or 0),
+            budget_calibration=self.estimate_calibration(),
+            fact_reliability=self.fact_reliability(),
+        )
 
     def task_records(self, limit: int = 20) -> list[TaskRecord]:
         with self._lock:

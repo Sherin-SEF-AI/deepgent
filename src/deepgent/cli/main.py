@@ -1527,6 +1527,8 @@ def report(
             f"{record.id}  {record.outcome:7s}  loops={record.loops:<3d} "
             f"tokens={record.tokens:<8d} {usd:>7s}  {record.wall_s:6.1f}s"
         )
+    typer.echo("")
+    typer.echo(store.summary().render())
 
 
 @app.command()

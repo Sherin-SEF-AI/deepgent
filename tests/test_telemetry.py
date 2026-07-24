@@ -251,3 +251,26 @@ class TestTelemetryTap:
         tap = make_telemetry_tap(store)
         asyncio.run(tap(_stop_input("sess-6"), None, hook_context))
         assert store.corpus_candidates() == []
+
+
+# --- WO-44 flywheel: telemetry summary --------------------------------------
+
+
+class TestSummary:
+    @pytest.mark.unit
+    def test_summary_aggregates(self, store: TelemetryStore) -> None:
+        store.record_task(_task_record(id="ok", outcome="success", usd=0.10, est_usd=0.20, loops=4))
+        store.record_task(_task_record(id="bad", outcome="error", usd=0.30, est_usd=0.30, loops=8))
+        summary = store.summary()
+        assert summary.tasks == 2
+        assert summary.successes == 1
+        assert summary.success_rate == pytest.approx(0.5)
+        assert summary.total_usd == pytest.approx(0.40)
+        assert summary.mean_loops == pytest.approx(6.0)
+        assert "telemetry summary" in summary.render()
+
+    @pytest.mark.unit
+    def test_summary_empty(self, store: TelemetryStore) -> None:
+        summary = store.summary()
+        assert summary.tasks == 0 and summary.success_rate == 0.0
+        assert summary.budget_calibration == pytest.approx(1.0)
