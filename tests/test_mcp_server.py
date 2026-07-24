@@ -99,3 +99,32 @@ def test_skills_eval_and_facts_and_reflect() -> None:
     assertions = json.dumps({"addr": [{"value": "0x10", "source": "datasheet_rag"}]})
     assert "0x10" in facts(assertions)
     assert "reflexion" in reflect("Bash", "pytest failed: 1 test failed")
+
+
+# --- HTTP auth guard --------------------------------------------------------
+
+
+def test_bearer_guard_rejects_and_allows() -> None:
+    import asyncio as _asyncio
+
+    from deepgent.mcp_server import bearer_guard
+
+    async def inner(scope: object, receive: object, send: object) -> None:
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+
+    sent: list[dict] = []
+
+    async def send(msg: dict) -> None:
+        sent.append(msg)
+
+    guarded = bearer_guard(inner, "secret")
+
+    # Missing/wrong token -> 401, inner not reached.
+    _asyncio.run(guarded({"type": "http", "headers": []}, None, send))
+    assert sent[0]["status"] == 401
+
+    # Correct token -> passes through to inner (200).
+    sent.clear()
+    ok_scope = {"type": "http", "headers": [(b"authorization", b"Bearer secret")]}
+    _asyncio.run(guarded(ok_scope, None, send))
+    assert sent[0]["status"] == 200

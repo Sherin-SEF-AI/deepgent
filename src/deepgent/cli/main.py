@@ -1465,23 +1465,33 @@ def mcp_cmd(
         False, "--allow-task", help="Expose run_task (costs API, edits files)."
     ),
     transport: str = typer.Option("stdio", "--transport", help="stdio, sse, or streamable-http."),
+    host: str = typer.Option("127.0.0.1", "--host", help="Bind host for http/sse transports."),
+    port: int = typer.Option(8000, "--port", help="Bind port for http/sse transports."),
     debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
 ) -> None:
     """Run deepgent as an MCP server so a Claude client can call its tools.
 
     Register with Claude Code:  claude mcp add deepgent -- deepgent mcp
-    Or add to Claude Desktop's config under mcpServers. Do not print to stdout
-    here; the stdio transport owns it.
+    Or add to Claude Desktop's config under mcpServers. For a claude.ai remote
+    connector, use --transport streamable-http and set DEEPGENT_MCP_TOKEN to
+    require a bearer token. Do not print to stdout here; stdio owns it.
     """
     # Logs go to stderr; stdout is the MCP protocol channel.
     _configure_logging(debug, quiet=not debug)
     try:
-        from deepgent.mcp_server import build_server
+        from deepgent.mcp_server import build_server, serve
     except ImportError as exc:  # mcp ships with claude-agent-sdk; guard anyway
         _fail(f"the mcp package is not available: {exc}", debug=debug)
         return
+    token = os.environ.get("DEEPGENT_MCP_TOKEN") or None
+    if transport != "stdio" and token is None:
+        typer.secho(
+            "warning: no DEEPGENT_MCP_TOKEN set; the HTTP endpoint is unauthenticated",
+            err=True,
+            fg=typer.colors.YELLOW,
+        )
     server = build_server(allow_task=allow_task)
-    server.run(transport=transport)  # type: ignore[arg-type]
+    serve(server, transport=transport, host=host, port=port, token=token)
 
 
 @app.command("gui")

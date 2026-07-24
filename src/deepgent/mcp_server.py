@@ -8,9 +8,13 @@ content or a path to a file with that content.
 """
 
 import json
+from collections.abc import Awaitable, Callable
 from pathlib import Path
+from typing import Any
 
 from mcp.server.fastmcp import FastMCP
+
+_ASGIApp = Callable[[Any, Any, Any], Awaitable[None]]
 
 
 def _read(arg: str) -> str:
@@ -164,3 +168,51 @@ def build_server(allow_task: bool = False) -> FastMCP:
     if allow_task:
         server.add_tool(run_task)
     return server
+
+
+def bearer_guard(app: _ASGIApp, token: str) -> _ASGIApp:
+    """Wrap an ASGI app to require 'Authorization: Bearer <token>' on HTTP.
+
+    Pure ASGI (inspects only the request scope), so it is safe with the
+    streaming SSE / streamable-http transports.
+    """
+    expected = f"Bearer {token}".encode()
+
+    async def guarded(scope: Any, receive: Any, send: Any) -> None:
+        if scope.get("type") == "http":
+            headers = dict(scope.get("headers") or [])
+            if headers.get(b"authorization") != expected:
+                await send(
+                    {
+                        "type": "http.response.start",
+                        "status": 401,
+                        "headers": [(b"content-type", b"text/plain; charset=utf-8")],
+                    }
+                )
+                await send({"type": "http.response.body", "body": b"unauthorized"})
+                return
+        await app(scope, receive, send)
+
+    return guarded
+
+
+def serve(
+    server: FastMCP,
+    transport: str = "stdio",
+    host: str = "127.0.0.1",
+    port: int = 8000,
+    token: str | None = None,
+) -> None:
+    """Run the server. stdio owns the process's stdio; http/sse bind host:port
+    and, when a token is given, require a bearer token (for remote connectors)."""
+    if transport == "stdio":
+        server.run("stdio")
+        return
+    server.settings.host = host
+    server.settings.port = port
+    app: _ASGIApp = server.sse_app() if transport == "sse" else server.streamable_http_app()
+    if token:
+        app = bearer_guard(app, token)
+    import uvicorn
+
+    uvicorn.run(app, host=host, port=port, log_level="warning")
