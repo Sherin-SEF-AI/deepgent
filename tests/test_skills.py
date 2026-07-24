@@ -105,6 +105,12 @@ class TestRepoSkills:
             "ros2-systems",
             "deepgent-verification-workflow",
             "edge-perf-methodology",
+            "camera-bringup-methodology",
+            "cuda-kernel-safety",
+            "int8-calibration-methodology",
+            "power-thermal-tuning",
+            "sensor-latency-tracing",
+            "failure-triage",
         }
         for pack in packs:
             body = (pack.path / "SKILL.md").read_text()
