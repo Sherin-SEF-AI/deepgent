@@ -253,8 +253,7 @@ class MainWindow(QMainWindow):
             "deepgent",
             f"deepgent {deepgent.__version__}\n\n"
             "Domain-locked autonomous engineering agent for AV, CV, and\n"
-            "embedded systems. Personal project of Sherin Joseph Roy.\n"
-            "Not a DeepMost AI product.",
+            "embedded systems. Personal project of Sherin Joseph Roy.",
         )
 
     # --- navigation ---------------------------------------------------------
