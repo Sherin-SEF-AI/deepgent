@@ -18,14 +18,20 @@ _MAX_LOG_BLOCKS = 5000
 
 
 class LogView(QPlainTextEdit):
-    """Append-only, read-only, monospace log with bounded memory."""
+    """Append-only, read-only, monospace log with bounded memory.
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    wrap=True wraps long lines to the widget width (for prose/streamed output);
+    the default keeps no-wrap so fixed-width tables and reports stay aligned.
+    """
+
+    def __init__(self, parent: QWidget | None = None, *, wrap: bool = False) -> None:
         super().__init__(parent)
         self.setReadOnly(True)
         self.setProperty("role", "log")
         self.setMaximumBlockCount(_MAX_LOG_BLOCKS)
-        self.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
+        self.setLineWrapMode(
+            QPlainTextEdit.LineWrapMode.WidgetWidth if wrap else QPlainTextEdit.LineWrapMode.NoWrap
+        )
 
     def append_line(self, text: str) -> None:
         for line in text.rstrip("\n").split("\n"):

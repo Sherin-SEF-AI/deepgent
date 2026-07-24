@@ -1,4 +1,5 @@
-"""Run Task panel: submit an agent task, stream output, watch budget/cost."""
+"""Run Task cockpit: run an agent task, watch it edit and run commands live,
+then inspect the diff, review, and test results it produced."""
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -6,11 +7,12 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
 
-from deepgent.core import TaskOutcome
+from deepgent.core import CommandRun, TaskEvent, TaskOutcome
 from deepgent.gui.async_bridge import AsyncTask
 from deepgent.gui.controllers.tasks import TaskController
 from deepgent.gui.widgets.animations import Spinner, bind_spinner
@@ -18,7 +20,7 @@ from deepgent.gui.widgets.common import LogView, toolbar_button
 
 
 class RunTaskPanel(QWidget):
-    """Enter a task, run it live, and see streamed output plus cost/turns."""
+    """Run a task, stream output, and inspect the code / review / tests."""
 
     def __init__(self, controller: TaskController | None = None) -> None:
         super().__init__()
@@ -27,6 +29,12 @@ class RunTaskPanel(QWidget):
         self._task.finished.connect(self._on_finished)
         self._task.failed.connect(self._on_failed)
         self._task.done.connect(self._on_done)
+        self._diff = AsyncTask(self)
+        self._diff.finished.connect(self._on_diff)
+        self._review = AsyncTask(self)
+        self._review.finished.connect(self._on_review_done)
+        self._test = AsyncTask(self)
+        self._test.finished.connect(self._on_test_done)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(8, 8, 8, 8)
@@ -62,9 +70,16 @@ class RunTaskPanel(QWidget):
         input_row.addWidget(self._stop_btn)
         root.addLayout(input_row)
 
-        # Streamed log.
-        self._log = LogView()
-        root.addWidget(self._log, 1)
+        # Cockpit tabs.
+        self._tabs = QTabWidget()
+        self._log = LogView(wrap=True)  # streamed prose wraps to width
+        self._tabs.addTab(self._log, "Output")
+        self._activity = LogView(wrap=True)
+        self._tabs.addTab(self._activity, "Activity")
+        self._tabs.addTab(self._build_diff_tab(), "Diff")
+        self._tabs.addTab(self._build_review_tab(), "Review")
+        self._tabs.addTab(self._build_test_tab(), "Tests")
+        root.addWidget(self._tabs, 1)
 
         # Status line.
         self._status = QLabel("idle")
@@ -72,12 +87,66 @@ class RunTaskPanel(QWidget):
         self._status.setAlignment(Qt.AlignmentFlag.AlignLeft)
         root.addWidget(self._status)
 
+        for task in (self._diff, self._review, self._test):
+            task.failed.connect(lambda m: self._status.setText(f"cockpit error: {m}"))
+
+    # --- tab builders -------------------------------------------------------
+
+    def _build_diff_tab(self) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(0, 6, 0, 0)
+        row = QHBoxLayout()
+        btn = toolbar_button("Refresh diff")
+        btn.clicked.connect(self._refresh_diff)
+        row.addWidget(btn)
+        row.addStretch(1)
+        layout.addLayout(row)
+        self._diff_view = LogView()  # keep diff alignment: no wrap
+        layout.addWidget(self._diff_view, 1)
+        return widget
+
+    def _build_review_tab(self) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(0, 6, 0, 0)
+        row = QHBoxLayout()
+        self._review_cmd = QLineEdit(self._controller.default_review_command())
+        btn = toolbar_button("Run review", role="accent")
+        btn.clicked.connect(self._run_review)
+        row.addWidget(QLabel("review"))
+        row.addWidget(self._review_cmd, 1)
+        row.addWidget(btn)
+        layout.addLayout(row)
+        self._review_view = LogView()
+        layout.addWidget(self._review_view, 1)
+        return widget
+
+    def _build_test_tab(self) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(0, 6, 0, 0)
+        row = QHBoxLayout()
+        self._test_cmd = QLineEdit(self._controller.default_test_command())
+        btn = toolbar_button("Run tests", role="accent")
+        btn.clicked.connect(self._run_test)
+        row.addWidget(QLabel("tests"))
+        row.addWidget(self._test_cmd, 1)
+        row.addWidget(btn)
+        layout.addLayout(row)
+        self._test_view = LogView()
+        layout.addWidget(self._test_view, 1)
+        return widget
+
+    # --- task run -----------------------------------------------------------
+
     def _on_run(self) -> None:
         task = self._input.text().strip()
         if not task or self._task.running:
             return
         budget = float(self._budget.value())
         self._log.clear_log()
+        self._activity.clear_log()
         self._log.append_line(f"$ deepgent run  (budget ${budget:.2f})")
         self._log.append_line(f"> {task}")
         self._set_running(True)
@@ -86,7 +155,17 @@ class RunTaskPanel(QWidget):
         def stream(text: str) -> None:
             self._log.append_line(text)
 
-        self._task.start(lambda: self._controller.run(task, budget, stream))
+        self._task.start(
+            lambda: self._controller.run(task, budget, stream, on_event=self._on_event)
+        )
+
+    def _on_event(self, event: TaskEvent) -> None:
+        if event.kind == "tool_use":
+            self._activity.append_line(f"-> {event.name}: {event.detail}")
+        else:
+            mark = "x" if event.is_error else "ok"
+            first = event.detail.splitlines()[0] if event.detail else ""
+            self._activity.append_line(f"   [{mark}] {event.name}: {first}")
 
     def _on_stop(self) -> None:
         self._task.cancel()
@@ -106,6 +185,8 @@ class RunTaskPanel(QWidget):
         )
         self._status.setProperty("role", "fail" if outcome.is_error else "ok")
         self._restyle(self._status)
+        # Show what changed as soon as the task lands.
+        self._refresh_diff()
 
     def _on_failed(self, message: str) -> None:
         self._log.append_line(f"[error] {message}")
@@ -115,6 +196,50 @@ class RunTaskPanel(QWidget):
 
     def _on_done(self) -> None:
         self._set_running(False)
+
+    # --- cockpit actions ----------------------------------------------------
+
+    def _refresh_diff(self) -> None:
+        if self._diff.running:
+            return
+        self._diff_view.clear_log()
+        self._diff_view.append_line("computing diff...")
+        self._diff.start(self._controller.diff)
+
+    def _on_diff(self, diff_text: object) -> None:
+        self._diff_view.clear_log()
+        self._diff_view.append_line(str(diff_text))
+
+    def _run_review(self) -> None:
+        command = self._review_cmd.text().strip()
+        if not command or self._review.running:
+            return
+        self._review_view.clear_log()
+        self._review_view.append_line(f"$ {command}")
+        self._review.start(lambda: self._controller.review(command))
+
+    def _on_review_done(self, run: object) -> None:
+        self._render_command(self._review_view, run)
+
+    def _run_test(self) -> None:
+        command = self._test_cmd.text().strip()
+        if not command or self._test.running:
+            return
+        self._test_view.clear_log()
+        self._test_view.append_line(f"$ {command}")
+        self._test.start(lambda: self._controller.test(command))
+
+    def _on_test_done(self, run: object) -> None:
+        self._render_command(self._test_view, run)
+
+    @staticmethod
+    def _render_command(view: LogView, run: object) -> None:
+        assert isinstance(run, CommandRun)
+        view.append_line(run.output or "(no output)")
+        view.append_line("")
+        view.append_line(f"[{'PASS' if run.ok else 'FAIL'}]  exit {run.exit_status}")
+
+    # --- helpers ------------------------------------------------------------
 
     def _set_running(self, running: bool) -> None:
         self._run_btn.setEnabled(not running)

@@ -14,6 +14,9 @@ from claude_agent_sdk import (
     ClaudeAgentOptions,
     ResultMessage,
     TextBlock,
+    ToolResultBlock,
+    ToolUseBlock,
+    UserMessage,
     query,
 )
 from claude_agent_sdk.types import McpServerConfig
@@ -37,6 +40,44 @@ MAIN_SESSION_TOOLS = [
     "Write",
     "Edit",
 ]
+
+
+@dataclass(frozen=True)
+class TaskEvent:
+    """One structured activity event during a task (a tool use or result)."""
+
+    kind: str  # "tool_use" | "tool_result"
+    name: str  # tool name (Write, Edit, Bash, ...)
+    detail: str  # file path / command / truncated output
+    is_error: bool = False
+
+
+def _summarize_tool_input(name: str, tool_input: dict[str, object]) -> str:
+    """A one-line summary of a tool call for the activity feed."""
+    if name in ("Write", "Edit") and "file_path" in tool_input:
+        return str(tool_input["file_path"])
+    if name == "Bash" and "command" in tool_input:
+        return str(tool_input["command"])[:200]
+    if name in ("Read", "Glob", "Grep"):
+        target = tool_input.get("file_path") or tool_input.get("pattern") or tool_input.get("path")
+        return str(target) if target is not None else ""
+    return str(tool_input)[:200]
+
+
+def _result_text(content: object) -> str:
+    """A truncated text summary of a tool result's content."""
+    if isinstance(content, str):
+        text = content
+    elif isinstance(content, list):
+        parts = [
+            str(block.get("text", "")) if isinstance(block, dict) else str(block)
+            for block in content
+        ]
+        text = "\n".join(p for p in parts if p)
+    else:
+        text = str(content)
+    text = text.strip()
+    return text if len(text) <= 500 else text[:500] + " ..."
 
 
 @dataclass(frozen=True)
@@ -148,12 +189,13 @@ class Orchestrator:
         self,
         task: str,
         on_text: Callable[[str], None] | None = None,
+        on_event: Callable[[TaskEvent], None] | None = None,
     ) -> TaskOutcome:
         """Run a single task to completion and return its outcome.
 
         on_text, when given, is called with each assistant text block as it
-        streams, so a live UI can render progress without waiting for the
-        final result.
+        streams. on_event, when given, is called with each tool use and tool
+        result, so a UI can show the agent editing files and running commands.
         """
         import time
 
@@ -166,6 +208,7 @@ class Orchestrator:
         prompt = await self._with_premortem(task)
 
         result: ResultMessage | None = None
+        tool_names: dict[str, str] = {}
         async for message in _run_query(prompt=prompt, options=options):
             if isinstance(message, AssistantMessage):
                 tracker.record_usage(message.model, message.usage)
@@ -174,6 +217,28 @@ class Orchestrator:
                         log.debug("assistant_text", text=block.text)
                         if on_text is not None:
                             on_text(block.text)
+                    elif isinstance(block, ToolUseBlock):
+                        tool_names[block.id] = block.name
+                        if on_event is not None:
+                            on_event(
+                                TaskEvent(
+                                    kind="tool_use",
+                                    name=block.name,
+                                    detail=_summarize_tool_input(block.name, block.input),
+                                )
+                            )
+            elif isinstance(message, UserMessage) and on_event is not None:
+                blocks = message.content if isinstance(message.content, list) else []
+                for block in blocks:
+                    if isinstance(block, ToolResultBlock):
+                        on_event(
+                            TaskEvent(
+                                kind="tool_result",
+                                name=tool_names.get(block.tool_use_id, "tool"),
+                                detail=_result_text(block.content),
+                                is_error=bool(block.is_error),
+                            )
+                        )
             elif isinstance(message, ResultMessage):
                 result = message
 

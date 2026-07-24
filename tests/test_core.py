@@ -137,3 +137,30 @@ def _run(orchestrator: Orchestrator, task: str) -> Any:
     import asyncio
 
     return asyncio.run(orchestrator.run_task(task))
+
+
+@pytest.mark.unit
+def test_run_task_emits_tool_events(
+    settings: DeepgentSettings, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import asyncio
+
+    from claude_agent_sdk import ToolResultBlock, ToolUseBlock, UserMessage
+
+    from deepgent.core import TaskEvent
+
+    async def fake_query(**_: Any) -> AsyncIterator[Any]:
+        yield AssistantMessage(
+            content=[ToolUseBlock(id="t1", name="Edit", input={"file_path": "src/a.py"})],
+            model="m",
+        )
+        yield UserMessage(content=[ToolResultBlock(tool_use_id="t1", content="ok", is_error=False)])
+        yield _result_message()
+
+    monkeypatch.setattr(orchestrator_module, "_run_query", fake_query)
+    events: list[TaskEvent] = []
+    orchestrator = Orchestrator(settings=settings, cwd=tmp_path)
+    asyncio.run(orchestrator.run_task("edit it", on_event=events.append))
+    assert [e.kind for e in events] == ["tool_use", "tool_result"]
+    assert events[0].name == "Edit" and events[0].detail == "src/a.py"
+    assert events[1].name == "Edit" and events[1].is_error is False
