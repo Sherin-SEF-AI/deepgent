@@ -148,9 +148,7 @@ def run_one_shot(
     try:
         # acceptEdits so the agent can write/edit files without an interactive
         # approver; safety_gate still gates destructive board operations.
-        settings = load_settings().model_copy(
-            update={"permission_mode": "acceptEdits"}, deep=True
-        )
+        settings = load_settings().model_copy(update={"permission_mode": "acceptEdits"}, deep=True)
         orchestrator = Orchestrator(settings=settings, cwd=Path.cwd())
         outcome = run_async(orchestrator.run_task(task), "running task", spin=not debug)
     except DeepgentError as exc:
