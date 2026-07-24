@@ -114,6 +114,22 @@ def test_theme_qss_is_nonempty() -> None:
     assert isinstance(QSS, str) and "QWidget" in QSS
 
 
+def test_response_view_streams_and_renders_markdown(qapp: QApplication) -> None:
+    from deepgent.gui.widgets.response import ResponseView
+
+    view = ResponseView()
+    view.append_stream("working...")
+    view.append_stream("more")
+    assert "working" in view.toPlainText()
+    view.render_markdown("# Title\n\n- a\n- b\n\n**bold** and `code`.")
+    # Markdown is rendered to rich text; the words survive, the syntax does not.
+    rendered = view.toPlainText()
+    assert "Title" in rendered and "bold" in rendered
+    assert "#" not in rendered and "**" not in rendered
+    view.clear_response()
+    assert view.toPlainText() == ""
+
+
 def test_bar_chart_paints(qapp: QApplication) -> None:
     from deepgent.gui.widgets.charts import BarChart
 

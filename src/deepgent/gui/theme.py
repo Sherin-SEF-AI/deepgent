@@ -105,6 +105,13 @@ QPlainTextEdit[role="log"] {{
     color: #c8c8c8;
     border: 1px solid {BORDER};
 }}
+QTextBrowser[role="response"] {{
+    font-size: 13px;
+    background-color: {BG_EDITOR};
+    color: {TEXT};
+    border: 1px solid {BORDER};
+    padding: 8px 12px;
+}}
 QComboBox::drop-down {{ border: 0; width: 16px; }}
 QComboBox QAbstractItemView {{
     background-color: {BG_PANEL};

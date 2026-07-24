@@ -17,6 +17,7 @@ from deepgent.gui.async_bridge import AsyncTask
 from deepgent.gui.controllers.tasks import TaskController
 from deepgent.gui.widgets.animations import Spinner, bind_spinner
 from deepgent.gui.widgets.common import LogView, toolbar_button
+from deepgent.gui.widgets.response import ResponseView
 
 
 class RunTaskPanel(QWidget):
@@ -72,7 +73,7 @@ class RunTaskPanel(QWidget):
 
         # Cockpit tabs.
         self._tabs = QTabWidget()
-        self._log = LogView(wrap=True)  # streamed prose wraps to width
+        self._log = ResponseView()  # wrapped, markdown-rendered response
         self._tabs.addTab(self._log, "Output")
         self._activity = LogView(wrap=True)
         self._tabs.addTab(self._activity, "Activity")
@@ -145,15 +146,14 @@ class RunTaskPanel(QWidget):
         if not task or self._task.running:
             return
         budget = float(self._budget.value())
-        self._log.clear_log()
+        self._log.clear_response()
         self._activity.clear_log()
-        self._log.append_line(f"$ deepgent run  (budget ${budget:.2f})")
-        self._log.append_line(f"> {task}")
+        self._log.append_stream(f"Running (budget ${budget:.2f}): {task}\n")
         self._set_running(True)
         self._status.setText("running...")
 
         def stream(text: str) -> None:
-            self._log.append_line(text)
+            self._log.append_stream(text)
 
         self._task.start(
             lambda: self._controller.run(task, budget, stream, on_event=self._on_event)
@@ -169,14 +169,14 @@ class RunTaskPanel(QWidget):
 
     def _on_stop(self) -> None:
         self._task.cancel()
-        self._log.append_line("[cancelled by user]")
+        self._log.append_stream("\n[cancelled by user]")
         self._status.setText("cancelled")
 
     def _on_finished(self, outcome: object) -> None:
         assert isinstance(outcome, TaskOutcome)
         if outcome.result:
-            self._log.append_line("")
-            self._log.append_line(outcome.result)
+            # Replace the streamed plain text with the polished markdown render.
+            self._log.render_markdown(outcome.result)
         cost = f"${outcome.total_cost_usd:.4f}" if outcome.total_cost_usd is not None else "n/a"
         verdict = "error" if outcome.is_error else "ok"
         self._status.setText(
@@ -189,7 +189,7 @@ class RunTaskPanel(QWidget):
         self._refresh_diff()
 
     def _on_failed(self, message: str) -> None:
-        self._log.append_line(f"[error] {message}")
+        self._log.append_stream(f"\n[error] {message}")
         self._status.setText(f"failed: {message}")
         self._status.setProperty("role", "fail")
         self._restyle(self._status)
