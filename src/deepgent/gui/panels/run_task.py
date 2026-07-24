@@ -1,6 +1,8 @@
 """Run Task cockpit: run an agent task, watch it edit and run commands live,
 then inspect the diff, review, and test results it produced."""
 
+from typing import TYPE_CHECKING
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QDoubleSpinBox,
@@ -15,9 +17,13 @@ from PySide6.QtWidgets import (
 from deepgent.core import CommandRun, TaskEvent, TaskOutcome
 from deepgent.gui.async_bridge import AsyncTask
 from deepgent.gui.controllers.tasks import TaskController
+from deepgent.gui.history import TaskHistory
 from deepgent.gui.widgets.animations import Spinner, bind_spinner
 from deepgent.gui.widgets.common import LogView, toolbar_button
 from deepgent.gui.widgets.response import ResponseView
+
+if TYPE_CHECKING:
+    from deepgent.gui.session import TaskSession
 
 
 class RunTaskPanel(QWidget):
@@ -26,6 +32,7 @@ class RunTaskPanel(QWidget):
     def __init__(self, controller: TaskController | None = None) -> None:
         super().__init__()
         self._controller = controller if controller is not None else TaskController()
+        self._history = TaskHistory()
         self._task = AsyncTask(self)
         self._task.finished.connect(self._on_finished)
         self._task.failed.connect(self._on_failed)
@@ -141,10 +148,65 @@ class RunTaskPanel(QWidget):
 
     # --- task run -----------------------------------------------------------
 
+    def set_task(self, task: str) -> None:
+        """Fill the task input (used by the menu's Open Recent / New Task)."""
+        self._input.setText(task)
+        self._input.setFocus()
+
+    def start_run(self) -> None:
+        """Public entry so the menu's Run action can start the current task."""
+        self._on_run()
+
+    def stop(self) -> None:
+        if self._task.running:
+            self._on_stop()
+
+    def run_review(self) -> None:
+        self._tabs.setCurrentIndex(3)
+        self._run_review()
+
+    def run_tests(self) -> None:
+        self._tabs.setCurrentIndex(4)
+        self._run_test()
+
+    def refresh_diff(self) -> None:
+        self._tabs.setCurrentIndex(2)
+        self._refresh_diff()
+
+    def clear_output(self) -> None:
+        self._log.clear_response()
+        self._activity.clear_log()
+
+    # --- session save / open ------------------------------------------------
+
+    def to_session(self) -> "TaskSession":
+        """Capture the current run as a portable session."""
+        from deepgent.gui.session import TaskSession
+
+        return TaskSession(
+            task=self._input.text(),
+            response=self._log.markdown(),
+            activity=self._activity.toPlainText(),
+            diff=self._diff_view.toPlainText(),
+            review=self._review_view.toPlainText(),
+            tests=self._test_view.toPlainText(),
+        )
+
+    def load_session(self, session: "TaskSession") -> None:
+        """Restore a saved session into the cockpit."""
+        self._input.setText(session.task)
+        self._log.render_markdown(session.response)
+        self._activity.setPlainText(session.activity)
+        self._diff_view.setPlainText(session.diff)
+        self._review_view.setPlainText(session.review)
+        self._test_view.setPlainText(session.tests)
+        self._status.setText(f"opened session ({session.session_id[:8] or 'saved'})")
+
     def _on_run(self) -> None:
         task = self._input.text().strip()
         if not task or self._task.running:
             return
+        self._history.add(task)
         budget = float(self._budget.value())
         self._log.clear_response()
         self._activity.clear_log()

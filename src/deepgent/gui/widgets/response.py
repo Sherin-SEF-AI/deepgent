@@ -38,3 +38,7 @@ class ResponseView(QTextBrowser):
         self._buffer = text
         self.setMarkdown(text)
         self.moveCursor(QTextCursor.MoveOperation.Start)
+
+    def markdown(self) -> str:
+        """The current response text (markdown source)."""
+        return self._buffer

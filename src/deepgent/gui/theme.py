@@ -112,6 +112,29 @@ QTextBrowser[role="response"] {{
     border: 1px solid {BORDER};
     padding: 8px 12px;
 }}
+QMenuBar {{
+    background-color: {BG_WINDOW};
+    color: {TEXT};
+    border-bottom: 1px solid {BORDER};
+    padding: 1px;
+}}
+QMenuBar::item {{
+    background: transparent;
+    padding: 3px 8px;
+    border-radius: 3px;
+}}
+QMenuBar::item:selected {{ background-color: {BG_WIDGET_HOVER}; }}
+QMenuBar::item:pressed {{ background-color: {ACCENT}; color: #ffffff; }}
+QMenu {{
+    background-color: {BG_PANEL};
+    color: {TEXT};
+    border: 1px solid {BORDER};
+    padding: 4px;
+}}
+QMenu::item {{ padding: 4px 24px 4px 20px; border-radius: 3px; }}
+QMenu::item:selected {{ background-color: {ACCENT}; color: #ffffff; }}
+QMenu::item:disabled {{ color: {TEXT_DIM}; }}
+QMenu::separator {{ height: 1px; background: {BORDER_LIGHT}; margin: 4px 6px; }}
 QComboBox::drop-down {{ border: 0; width: 16px; }}
 QComboBox QAbstractItemView {{
     background-color: {BG_PANEL};
