@@ -109,10 +109,17 @@ class ThermalEnvelopeResult:
     workload: str
     modes: list[ModeEnvelope] = field(default_factory=list)
 
+    @property
+    def best_mode(self) -> ModeEnvelope | None:
+        """The power mode with the highest sustained throughput."""
+        scored = [m for m in self.modes if m.throughput is not None]
+        return max(scored, key=lambda m: m.throughput.sustained) if scored else None  # type: ignore[union-attr]
+
     def to_dict(self) -> dict[str, object]:
         return {
             "board": self.board,
             "workload": self.workload,
+            "best_mode": None if self.best_mode is None else self.best_mode.mode,
             "modes": [mode.to_dict() for mode in self.modes],
         }
 
@@ -132,6 +139,9 @@ class ThermalEnvelopeResult:
                 f"{_fmt(mode.tj_max_c):>6} {_fmt(mode.power_mean_w):>8} "
                 f"{_fmt(mode.knee_s):>7} {'yes' if mode.throttled else 'no':>9}"
             )
+        if self.best_mode is not None:
+            rows.append("-" * len(header))
+            rows.append(f"best sustained throughput: {self.best_mode.mode}")
         return "\n".join(rows) + "\n"
 
     def persist(self, run_dir: Path) -> None:

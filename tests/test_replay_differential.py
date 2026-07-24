@@ -165,3 +165,20 @@ class TestDifferential:
         runner = DifferentialRunner(temp_home)
         with pytest.raises(BoardError, match="does not exist"):
             asyncio.run(runner.run(temp_home / "ghost", ["agx-orin"], "./x"))
+
+
+# --- WO-42 differential per-metric winners ----------------------------------
+
+
+def test_differential_per_metric_winners() -> None:
+    from deepgent.evals.differential import BoardRun, DifferentialResult
+
+    result = DifferentialResult(artifact="a")
+    result.runs = [
+        BoardRun("agx", 0, latency_ms=8.0, metrics={"power_mean_w": 15.0, "energy_j": 30.0}),
+        BoardRun("nx", 0, latency_ms=12.0, metrics={"power_mean_w": 8.0, "energy_j": 20.0}),
+    ]
+    winners = result.winners
+    assert winners["latency_ms"] == "agx"  # fastest
+    assert winners["power_mean_w"] == "nx"  # lowest power
+    assert winners["energy_j"] == "nx"  # most efficient

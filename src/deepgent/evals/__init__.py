@@ -37,6 +37,7 @@ from deepgent.evals.quant_sweep import (
     SweepConfig,
     SweepPoint,
     expand_grid,
+    knee,
     pareto_frontier,
     select_best,
 )
@@ -110,6 +111,7 @@ __all__ = [
     "diff_labels",
     "expand_grid",
     "find_golden_file",
+    "knee",
     "load_candidates",
     "load_golden",
     "new_run_id",

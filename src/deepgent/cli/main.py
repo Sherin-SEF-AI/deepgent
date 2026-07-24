@@ -572,6 +572,10 @@ def quant_sweep_cmd(
     typer.echo(result.render_table())
     best = select_best(result.frontier)
     typer.echo(f"best (min latency on frontier): {best.config.label if best else 'none'}")
+    from deepgent.evals import knee
+
+    efficient = knee(result.frontier)
+    typer.echo(f"efficiency knee (max fps/W): {efficient.config.label if efficient else 'none'}")
     typer.echo(f"artifacts: {run_dir}")
 
 

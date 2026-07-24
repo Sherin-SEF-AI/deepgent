@@ -177,3 +177,20 @@ def test_fleet_matrix_end_to_end(
     assert claims[0].works is True and claims[1].works is False
     assert (tmp_path / "run" / "fleet-matrix.json").is_file()
     assert (tmp_path / "run" / "matrix-claims.json").is_file()
+
+
+# --- WO-42 fleet winner/ranking ---------------------------------------------
+
+
+def test_fleet_winner_and_ranking() -> None:
+    from deepgent.evals.fleet import FleetEntry, FleetResult
+
+    result = FleetResult(artifact="./b", run_id="r")
+    result.entries = [
+        FleetEntry("slow", {"board": "a"}, ok=True, latency_ms=20, fps=25, power_w=10),
+        FleetEntry("fast", {"board": "b"}, ok=True, latency_ms=10, fps=60, power_w=12),
+        FleetEntry("broken", {"board": "c"}, ok=False, latency_ms=None, fps=None, power_w=None),
+    ]
+    assert result.winner is not None and result.winner.board == "fast"
+    assert [e.board for e in result.ranking] == ["fast", "slow", "broken"]
+    assert result.to_dict()["winner"] == "fast"

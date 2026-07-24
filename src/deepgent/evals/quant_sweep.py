@@ -109,6 +109,27 @@ def pareto_frontier(points: list[SweepPoint]) -> list[SweepPoint]:
     return frontier
 
 
+def knee(frontier: list[SweepPoint]) -> SweepPoint | None:
+    """The efficiency knee: the frontier config with the best fps-per-watt.
+
+    Falls back to fps-per-(1/latency) when power is unavailable, so it always
+    returns a point when the frontier is non-empty and has throughput data.
+    """
+
+    def efficiency(point: SweepPoint) -> float | None:
+        if point.fps is None:
+            return None
+        if point.power_w and point.power_w > 0:
+            return point.fps / point.power_w
+        return point.fps
+
+    scored = [(p, efficiency(p)) for p in frontier]
+    eligible = [(p, e) for p, e in scored if e is not None]
+    if not eligible:
+        return None
+    return max(eligible, key=lambda pair: pair[1])[0]
+
+
 def select_best(
     frontier: list[SweepPoint],
     max_power_w: float | None = None,

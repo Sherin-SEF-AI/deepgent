@@ -308,3 +308,16 @@ def test_model_selector_end_to_end(
     assert isinstance(result, SelectionResult)
     assert result.winner is not None and result.winner.name == "small"
     assert (tmp_path / "run" / "model-selection.json").is_file()
+
+
+# --- WO-42 verification metrics: quant-sweep knee ---------------------------
+
+
+def test_quant_sweep_knee_picks_best_fps_per_watt() -> None:
+    from deepgent.evals.quant_sweep import knee
+
+    fast_hot = _point(("int8", 1, "gpu"), lat=5.0, en=20.0, acc=0.80)  # 200 fps / 20W = 10
+    frugal = _point(("int8", 2, "gpu"), lat=8.0, en=6.0, acc=0.82)  # 125 fps / 6W ~= 20.8
+    frontier = pareto_frontier([fast_hot, frugal])
+    assert knee(frontier).config.label == "int8-b2-gpu"
+    assert knee([]) is None

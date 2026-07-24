@@ -60,6 +60,17 @@ class FleetResult:
     def all_ok(self) -> bool:
         return bool(self.entries) and all(e.ok for e in self.entries)
 
+    @property
+    def ranking(self) -> list[FleetEntry]:
+        """Passing boards first, fastest (highest fps) first within each group."""
+        return sorted(self.entries, key=lambda e: (0 if e.ok else 1, -(e.fps or 0.0)))
+
+    @property
+    def winner(self) -> FleetEntry | None:
+        """The best-performing board that passed (highest fps), or None."""
+        passing = [e for e in self.entries if e.ok and e.fps is not None]
+        return max(passing, key=lambda e: e.fps or 0.0) if passing else None
+
     def claims(self) -> list[Claim]:
         """A verified compatibility claim per board, keyed by its stack."""
         return [
@@ -78,6 +89,7 @@ class FleetResult:
             "artifact": self.artifact,
             "run_id": self.run_id,
             "all_ok": self.all_ok,
+            "winner": None if self.winner is None else self.winner.board,
             "entries": [e.to_dict() for e in self.entries],
             "claims": [
                 {"stack": c.stack, "component": c.component, "works": c.works}
@@ -96,6 +108,8 @@ class FleetResult:
             )
         rows.append("-" * len(header))
         rows.append(f"fleet: {'ALL OK' if self.all_ok else 'REGRESSIONS PRESENT'}")
+        if self.winner is not None:
+            rows.append(f"fastest passing board: {self.winner.board} ({_fmt(self.winner.fps)} fps)")
         return "\n".join(rows) + "\n"
 
     def persist(self, run_dir: Path) -> None:

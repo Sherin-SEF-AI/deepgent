@@ -49,9 +49,39 @@ class DifferentialResult:
     artifact: str
     runs: list[BoardRun] = field(default_factory=list)
 
+    def best_by(self, metric: str, lower_is_better: bool = True) -> BoardRun | None:
+        """The board with the best value for a metric among successful runs.
+
+        metric is 'latency_ms', 'power_mean_w', 'energy_j', or 'cost_usd'.
+        """
+
+        def value(run: BoardRun) -> float | None:
+            if metric == "latency_ms":
+                return run.latency_ms
+            if metric == "cost_usd":
+                return run.cost_usd
+            return run.metrics.get(metric)
+
+        scored = [(run, value(run)) for run in self.runs if run.ok]
+        eligible = [(run, v) for run, v in scored if v is not None]
+        if not eligible:
+            return None
+        pick = min if lower_is_better else max
+        return pick(eligible, key=lambda pair: pair[1])[0]
+
+    @property
+    def winners(self) -> dict[str, str | None]:
+        """Best board per metric (lower is better for all of these)."""
+        result: dict[str, str | None] = {}
+        for metric in ("latency_ms", "power_mean_w", "energy_j", "cost_usd"):
+            best = self.best_by(metric)
+            result[metric] = best.board if best is not None else None
+        return result
+
     def to_dict(self) -> dict[str, object]:
         return {
             "artifact": self.artifact,
+            "winners": self.winners,
             "runs": [
                 {
                     "board": run.board,
@@ -81,6 +111,18 @@ class DifferentialResult:
                 f"{_fmt(run.metrics.get('tj_max_c')):>6} "
                 f"{_fmt(run.cost_usd):>9}"
             )
+        winners = self.winners
+        if any(winners.values()):
+            rows.append("-" * len(header))
+            labels = {
+                "latency_ms": "fastest",
+                "power_mean_w": "lowest power",
+                "energy_j": "most efficient",
+                "cost_usd": "cheapest",
+            }
+            for metric, label in labels.items():
+                if winners.get(metric):
+                    rows.append(f"{label}: {winners[metric]}")
         return "\n".join(rows) + "\n"
 
 
