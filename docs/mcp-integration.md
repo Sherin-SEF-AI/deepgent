@@ -16,13 +16,17 @@ This runs `uv tool install --editable ".[gui]"`, putting `deepgent`, `dg`, and
 ## Run the server
 
 ```
-deepgent mcp                 # stdio server, deterministic tools only
+deepgent mcp                 # stdio server, full tool surface (no run_task)
 deepgent mcp --allow-task    # also expose run_task (costs API, edits files)
 ```
 
 ## Tools exposed
 
-Deterministic, no hardware, no API cost:
+`deepgent mcp` exposes deepgent's full tool surface. String arguments accept
+either inline JSON or a path to a file with that JSON; comma lists are plain
+`a,b,c`; stacks are `key=value,key=value`.
+
+### Deterministic (no hardware, no API cost)
 
 - `hw_check(config)` - pin / I2C / power conflict detection for a carrier board
 - `boards_catalog(family?)` - the supported board-type catalog
@@ -32,12 +36,39 @@ Deterministic, no hardware, no API cost:
 - `skills_eval(ablation)` - skill-lift promote/keep/retire
 - `facts(assertions)` - confidence-calibrated fact arbitration
 - `reflect(tool, error)` - taxonomy-classified root-cause replan
+- `generate_ros2_node(package, node, sub_topic?, pub_topic?)` - scaffold an
+  ament_python ROS 2 node package
+- `generate_systemd(name, exec_start, description?, user?, watchdog?)` - scaffold
+  a hardened systemd unit
+- `host_doctor()` - environment diagnostics (uv, docker, qemu, SDK, key)
+- `host_profile()` - detected device class, arch, accelerator, cpu, ram
+- `telemetry_summary()` - task counts, success rate, spend, learned calibrations
+- `boards_list()` - the registered target boards
 
-With `--allow-task` (gated because it costs API and edits files):
+### Knowledge layer (returns a note if the knowledge server is not configured)
+
+- `premortem(symptom, hw?, stack?)` - corpus + matrix failure-mode pre-mortem
+- `triage(symptom, hw?)` - corpus-first debugging before any LLM reasoning
+
+### On-target runners (need a registered board; return an error if none is reachable)
+
+Register a board first with `deepgent boards add`. Each runs over SSH and
+captures metrics under `.deepgent/runs/`.
+
+- `profile_thermal(board, workload, hold?, modes?, tj_max?)` - thermal/DVFS envelope
+- `profile_latency(board, command, budget_ms?, capture?)` - per-stage p99 latency
+- `profile_nsight(board, command, capture?)` - bottleneck classification
+- `cuda_check(board, run, build?, tools?)` - compute-sanitizer gate
+- `fleet(command, boards)` - benchmark across a fleet, compat+perf matrix
+- `soak(board, hours, workload?, tj_max?)` - endurance run with anomaly snapshots
+- `differential(artifact, boards, command)` - one artifact across boards, compared
+- `accuracy_gate(board, command, metric, baseline?, tolerance?, capture?)` - on-device eval gate
+- `quant_sweep(board, command, precisions?, batches?, devices?, accuracy_metric?, capture?)` - precision Pareto sweep
+- `select_model(board, manifest, ...)` - pick candidates meeting a deploy budget
+
+### Gated (only with `--allow-task`, because it costs API and edits files)
 
 - `run_task(task, budget)` - the full agent loop (writes code, reviews, tests)
-
-String arguments accept either inline JSON or a path to a file with that JSON.
 
 ## Register with Claude Code
 

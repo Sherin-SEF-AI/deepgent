@@ -9,13 +9,20 @@ import pytest
 from deepgent.mcp_server import (
     accuracy_score,
     boards_catalog,
+    boards_list,
     build_server,
     facts,
+    generate_ros2_node,
+    generate_systemd,
+    host_doctor,
+    host_profile,
     hw_check,
     matrix_analyze,
     matrix_query,
+    profile_latency,
     reflect,
     skills_eval,
+    telemetry_summary,
 )
 
 pytestmark = pytest.mark.unit
@@ -26,9 +33,10 @@ def _tool_names(allow_task: bool) -> set[str]:
     return {t.name for t in asyncio.run(server.list_tools())}
 
 
-def test_deterministic_tools_registered() -> None:
+def test_full_tool_surface_registered() -> None:
     names = _tool_names(allow_task=False)
-    assert names == {
+    # Deterministic + generators + host/telemetry/boards, always exposed.
+    assert {
         "hw_check",
         "boards_catalog",
         "matrix_query",
@@ -37,12 +45,62 @@ def test_deterministic_tools_registered() -> None:
         "skills_eval",
         "facts",
         "reflect",
-    }
+        "generate_ros2_node",
+        "generate_systemd",
+        "host_doctor",
+        "host_profile",
+        "telemetry_summary",
+        "boards_list",
+    } <= names
+    # Knowledge products (degrade gracefully) and on-target runners.
+    assert {"premortem", "triage"} <= names
+    assert {
+        "profile_thermal",
+        "profile_latency",
+        "profile_nsight",
+        "cuda_check",
+        "fleet",
+        "soak",
+        "differential",
+        "accuracy_gate",
+        "quant_sweep",
+        "select_model",
+    } <= names
     assert "run_task" not in names
 
 
 def test_run_task_only_when_allowed() -> None:
     assert "run_task" in _tool_names(allow_task=True)
+
+
+def test_generator_tools() -> None:
+    ros2 = generate_ros2_node("perception", "detector")
+    assert "package.xml" in ros2 and "detector" in ros2
+    unit = generate_systemd("vision", "/usr/bin/vision --run", watchdog=10)
+    assert "[Service]" in unit and "ExecStart=/usr/bin/vision --run" in unit
+
+
+def test_host_and_telemetry_tools() -> None:
+    assert "arch=" in host_profile()
+    # Diagnostics always render one line per check with an OK/FAIL marker.
+    assert "[" in host_doctor()
+    # No telemetry db yet -> summary still renders without raising.
+    assert isinstance(telemetry_summary(), str)
+
+
+def test_boards_list_without_registry(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    assert "no boards registered" in boards_list()
+
+
+def test_hardware_tool_errors_without_board(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # An on-target runner with no such board returns a clean error, never raises.
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.chdir(tmp_path)
+    out = asyncio.run(profile_latency("no-such-board", "true"))
+    assert out.startswith("error:")
 
 
 def test_hw_check_tool() -> None:

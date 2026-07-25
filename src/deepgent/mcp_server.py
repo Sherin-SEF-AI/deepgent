@@ -14,7 +14,15 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
+from deepgent.errors import DeepgentError as _DeepgentError
+
 _ASGIApp = Callable[[Any, Any, Any], Awaitable[None]]
+
+
+def _settings() -> Any:
+    from deepgent.config import load_settings
+
+    return load_settings()
 
 
 def _read(arg: str) -> str:
@@ -132,6 +140,321 @@ def reflect(tool: str, error: str) -> str:
     return _reflect(tool, error).render()
 
 
+def _csv(value: str) -> list[str]:
+    return [v.strip() for v in value.split(",") if v.strip()]
+
+
+def _stack(value: str) -> dict[str, str]:
+    return dict(kv.split("=", 1) for kv in value.split(",") if "=" in kv)
+
+
+# --- generators (deterministic) --------------------------------------------
+
+
+def generate_ros2_node(
+    package: str, node: str, sub_topic: str = "input", pub_topic: str = "output"
+) -> str:
+    """Scaffold a buildable ament_python ROS 2 node package. Returns each
+    generated file's path and contents."""
+    from deepgent.generators import Ros2NodeSpec, scaffold_ros2_node
+
+    out = scaffold_ros2_node(Ros2NodeSpec(package, node, sub_topic, pub_topic))
+    blocks = [f"=== {rel} ===\n{content}" for rel, content in out.files.items()]
+    return "\n\n".join(blocks) + "\n\nnext:\n" + "\n".join(f"- {t}" for t in out.todos)
+
+
+def generate_systemd(
+    name: str, exec_start: str, description: str = "", user: str = "", watchdog: int = 0
+) -> str:
+    """Scaffold a hardened systemd .service unit (restart, clean stop, optional
+    watchdog)."""
+    from deepgent.generators import SystemdUnitSpec, scaffold_systemd_unit
+
+    out = scaffold_systemd_unit(
+        SystemdUnitSpec(
+            name=name,
+            exec_start=exec_start,
+            description=description,
+            user=user or None,
+            watchdog_sec=watchdog or None,
+        )
+    )
+    return "\n\n".join(f"=== {rel} ===\n{c}" for rel, c in out.files.items())
+
+
+# --- host / telemetry / boards ---------------------------------------------
+
+
+def host_doctor() -> str:
+    """Run deepgent's environment diagnostics (host, python, uv, docker, qemu,
+    versions, SDK, API key)."""
+    from deepgent.host.diagnostics import run_checks
+
+    return "\n".join(f"[{'OK' if c.ok else 'FAIL'}] {c.name}: {c.detail}" for c in run_checks())
+
+
+def host_profile() -> str:
+    """Show the detected host profile (device class, arch, accelerator, cpu, ram)."""
+    from deepgent.host import detect_host
+
+    p = detect_host()
+    return (
+        f"device_class={p.device_class} arch={p.arch} accelerator={p.accelerator} "
+        f"cpu={p.cpu_count} ram_mb={p.ram_mb} os={p.os}"
+    )
+
+
+def telemetry_summary() -> str:
+    """Aggregate telemetry: task count, success rate, spend, and learned
+    budget/fact calibrations."""
+    from deepgent.telemetry import TelemetryStore
+
+    return TelemetryStore().summary().render()
+
+
+def boards_list() -> str:
+    """List the registered target boards."""
+    from deepgent.boards import load_registry
+
+    boards = load_registry()
+    if not boards:
+        return "no boards registered (deepgent boards add ...)"
+    lines = []
+    for b in boards.values():
+        where = "this machine" if b.transport == "local" else f"{b.ssh_user}@{b.host}"
+        lines.append(f"{b.id} [{b.transport}] {where} type={b.type} l4t={b.l4t or '-'}")
+    return "\n".join(lines)
+
+
+# --- knowledge / RAG products (degrade gracefully) -------------------------
+
+
+async def premortem(symptom: str, hw: str = "", stack: str = "") -> str:
+    """Predict failure modes for a task from the corpus and matrix. Needs the
+    knowledge layer; returns a note if it is not configured."""
+    from deepgent.knowledge import build_rag_client
+    from deepgent.knowledge.premortem import premortem as _premortem
+
+    client = build_rag_client(_settings())
+    try:
+        report = await _premortem(client, symptom, hw=hw or None, stack=_stack(stack) or None)
+        return report.render()
+    except Exception as exc:  # knowledge server absent / unreachable
+        return f"knowledge layer unavailable: {exc}"
+    finally:
+        await client.aclose()
+
+
+async def triage(symptom: str, hw: str = "") -> str:
+    """Corpus-first debugging: consult the failure corpus before any LLM
+    reasoning. Needs the knowledge layer."""
+    from deepgent.knowledge import build_rag_client
+    from deepgent.knowledge import triage as _triage
+
+    client = build_rag_client(_settings())
+    try:
+        return (await _triage(client, symptom, hw=hw or None)).render()
+    except Exception as exc:
+        return f"knowledge layer unavailable: {exc}"
+    finally:
+        await client.aclose()
+
+
+# --- on-target runners (need a registered board; error if unavailable) ------
+
+
+def _run_dir(prefix: str):  # type: ignore[no-untyped-def]
+    from deepgent.evals import create_run_dir
+
+    return create_run_dir(prefix, Path.cwd())
+
+
+async def profile_thermal(
+    board: str, workload: str, hold: float = 60.0, modes: str = "", tj_max: float = 95.0
+) -> str:
+    """Sustained thermal/DVFS envelope on a board (burst vs sustained, thermal
+    knee). Requires a registered board."""
+    from deepgent.evals import parse_modes
+    from deepgent.evals.thermal_envelope import ThermalEnvelopeProfiler
+
+    try:
+        mode_list = parse_modes(modes) if modes else None
+        result = await ThermalEnvelopeProfiler(board, _run_dir(f"thermal-{board}")).run(
+            workload, hold, mode_list, tj_ceiling_c=tj_max
+        )
+        return result.render_table()
+    except _DeepgentError as exc:
+        return f"error: {exc}"
+
+
+async def profile_latency(
+    board: str, command: str, budget_ms: float = 0.0, capture: float = 30.0
+) -> str:
+    """Glass-to-glass per-stage latency trace with a p99 budget gate. Requires a
+    registered board."""
+    from deepgent.evals.latency_trace import LatencyTracer
+
+    try:
+        trace = await LatencyTracer(board, _run_dir(f"latency-{board}")).run(
+            command, budget_ms=budget_ms or None, capture_s=capture
+        )
+        return trace.render_report()
+    except _DeepgentError as exc:
+        return f"error: {exc}"
+
+
+async def profile_nsight(board: str, command: str, capture: float = 120.0) -> str:
+    """Classify the dominant bottleneck (compute/memory/sync/cpu) from an Nsight
+    trace. Requires a registered board."""
+    from deepgent.evals.nsight import NsightProfiler
+
+    try:
+        result = await NsightProfiler(board, _run_dir(f"nsight-{board}")).run(command, capture)
+        return result.render()
+    except _DeepgentError as exc:
+        return f"error: {exc}"
+
+
+async def cuda_check(
+    board: str, run: str, build: str = "", tools: str = "memcheck,racecheck"
+) -> str:
+    """Run compute-sanitizer on a target and gate on memory/race errors.
+    Requires a registered GPU board."""
+    from deepgent.evals.cuda_check import CudaSanitizerRunner
+
+    try:
+        result = await CudaSanitizerRunner(board, _run_dir(f"cuda-{board}")).run(
+            run, build or None, _csv(tools)
+        )
+        return result.render()
+    except _DeepgentError as exc:
+        return f"error: {exc}"
+
+
+async def fleet(command: str, boards: str) -> str:
+    """Run a benchmark across a fleet; build a compat+perf matrix. boards is a
+    comma-separated list of registered board ids."""
+    from deepgent.evals import FleetRunner, new_run_id
+
+    try:
+        result = await FleetRunner(new_run_id(), _run_dir("fleet")).run(command, _csv(boards))
+        return result.render_table()
+    except _DeepgentError as exc:
+        return f"error: {exc}"
+
+
+async def soak(board: str, hours: float, workload: str = "", tj_max: float = 95.0) -> str:
+    """Endurance run with anomaly snapshots and a survival report. Requires a
+    registered board."""
+    from deepgent.evals.soak import AnomalyRules, SoakRunner, default_phases
+
+    try:
+        runner = SoakRunner(board, _run_dir(f"soak-{board}"), rules=AnomalyRules(tj_max_c=tj_max))
+        result = await runner.run(default_phases(hours * 3600.0, workload or None))
+        return result.render_report()
+    except _DeepgentError as exc:
+        return f"error: {exc}"
+
+
+async def differential(artifact: str, boards: str, command: str) -> str:
+    """Run one local artifact across boards and compare latency/power/energy.
+    boards is a comma-separated list of registered board ids."""
+    from deepgent.evals import create_run_dir
+    from deepgent.evals.differential import DifferentialRunner
+
+    try:
+        runner = DifferentialRunner(Path.cwd())
+        result = await runner.run(Path(artifact), _csv(boards), command)
+        runner.persist(result, create_run_dir("differential", Path.cwd()))
+        return result.render_table()
+    except _DeepgentError as exc:
+        return f"error: {exc}"
+
+
+async def accuracy_gate(
+    board: str,
+    command: str,
+    metric: str = "mAP",
+    baseline: str = "",
+    tolerance: float = 0.0,
+    capture: float = 120.0,
+) -> str:
+    """Run an on-device eval and gate the metric against a baseline. The device
+    must print 'METRIC <name> <value>'. Requires a registered board."""
+    from deepgent.evals.accuracy import AccuracyGate, load_baseline
+
+    try:
+        base = load_baseline(baseline or None, metric)
+        result = await AccuracyGate().run(board, command, metric, base, tolerance, capture)
+        return result.render()
+    except _DeepgentError as exc:
+        return f"error: {exc}"
+
+
+async def quant_sweep(
+    board: str,
+    command: str,
+    precisions: str = "fp16,int8",
+    batches: str = "1,2",
+    devices: str = "gpu",
+    accuracy_metric: str = "",
+    capture: float = 30.0,
+) -> str:
+    """Sweep precision x batch x device on a board to a Pareto frontier.
+    command is a template with {precision} {batch} {device}. Requires a board."""
+    from deepgent.evals import expand_grid, knee, select_best
+    from deepgent.evals.quant_sweep import QuantSweepRunner
+
+    try:
+        configs = expand_grid(_csv(precisions), [int(b) for b in _csv(batches)], _csv(devices))
+        result = await QuantSweepRunner(board, _run_dir(f"quant-{board}")).run(
+            command, configs, capture, accuracy_metric or None
+        )
+        best = select_best(result.frontier)
+        eff = knee(result.frontier)
+        return (
+            result.render_table()
+            + f"\nbest(min latency): {best.config.label if best else 'none'}"
+            + f"\nknee(max fps/W): {eff.config.label if eff else 'none'}"
+        )
+    except _DeepgentError as exc:
+        return f"error: {exc}"
+
+
+async def select_model(
+    board: str,
+    manifest: str,
+    max_power: float = 0.0,
+    min_fps: float = 0.0,
+    max_latency: float = 0.0,
+    min_accuracy: float = 0.0,
+    accuracy_metric: str = "",
+    capture: float = 30.0,
+) -> str:
+    """Benchmark candidate models on a board and return those meeting a
+    power/fps/latency/accuracy budget. manifest is a JSON array path or content."""
+    from deepgent.evals.model_selector import Constraint, ModelSelector, load_candidates
+
+    try:
+        # load_candidates takes a path; write inline JSON to a temp if needed.
+        path = Path(manifest)
+        if not path.is_file():
+            path = _run_dir(f"select-{board}") / "manifest.json"
+            path.write_text(manifest)
+        constraint = Constraint(
+            max_power_w=max_power or None,
+            min_fps=min_fps or None,
+            max_latency_ms=max_latency or None,
+            min_accuracy=min_accuracy or None,
+        )
+        result = await ModelSelector(board, _run_dir(f"select-{board}")).run(
+            load_candidates(path), constraint, capture, accuracy_metric or None
+        )
+        return result.render_table()
+    except _DeepgentError as exc:
+        return f"error: {exc}"
+
+
 async def run_task(task: str, budget: float = 0.5) -> str:
     """Run a full deepgent agent task to completion (writes/edits files, runs
     commands, reviews and tests). Costs API and modifies the working directory;
@@ -148,6 +471,7 @@ async def run_task(task: str, budget: float = 0.5) -> str:
     return f"[{verdict} | {outcome.num_turns} turns | {cost}]\n\n{outcome.result}"
 
 
+# Deterministic, no-hardware, no-API: safe to expose everywhere.
 _DETERMINISTIC = (
     hw_check,
     boards_catalog,
@@ -157,13 +481,40 @@ _DETERMINISTIC = (
     skills_eval,
     facts,
     reflect,
+    generate_ros2_node,
+    generate_systemd,
+    host_doctor,
+    host_profile,
+    telemetry_summary,
+    boards_list,
+)
+
+# Query the knowledge layer (RAG/matrix); degrade to a note when it is absent.
+_KNOWLEDGE = (
+    premortem,
+    triage,
+)
+
+# Execute on a registered target board over SSH; return an error if none is
+# reachable. The board registry (deepgent boards add) is the access boundary.
+_HARDWARE = (
+    profile_thermal,
+    profile_latency,
+    profile_nsight,
+    cuda_check,
+    fleet,
+    soak,
+    differential,
+    accuracy_gate,
+    quant_sweep,
+    select_model,
 )
 
 
 def build_server(allow_task: bool = False) -> FastMCP:
     """Build the deepgent MCP server; allow_task adds the paid run_task tool."""
     server = FastMCP("deepgent")
-    for fn in _DETERMINISTIC:
+    for fn in (*_DETERMINISTIC, *_KNOWLEDGE, *_HARDWARE):
         server.add_tool(fn)
     if allow_task:
         server.add_tool(run_task)
