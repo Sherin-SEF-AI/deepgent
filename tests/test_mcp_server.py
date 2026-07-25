@@ -53,7 +53,7 @@ def test_full_tool_surface_registered() -> None:
         "boards_list",
     } <= names
     # Knowledge products (degrade gracefully) and on-target runners.
-    assert {"premortem", "triage"} <= names
+    assert {"premortem", "triage", "upgrade_check", "scaffold_driver"} <= names
     assert {
         "profile_thermal",
         "profile_latency",
@@ -65,7 +65,12 @@ def test_full_tool_surface_registered() -> None:
         "accuracy_gate",
         "quant_sweep",
         "select_model",
+        "shadow",
+        "replay",
+        "bisect",
     } <= names
+    # Deterministic knowledge/generator products.
+    assert {"errata_scan", "bom_advise"} <= names
     assert "run_task" not in names
 
 
@@ -78,6 +83,37 @@ def test_generator_tools() -> None:
     assert "package.xml" in ros2 and "detector" in ros2
     unit = generate_systemd("vision", "/usr/bin/vision --run", watchdog=10)
     assert "[Service]" in unit and "ExecStart=/usr/bin/vision --run" in unit
+
+
+def test_deterministic_knowledge_products() -> None:
+    from deepgent.mcp_server import bom_advise, errata_scan
+
+    candidates = json.dumps(
+        [
+            {
+                "board": "agx-orin",
+                "stack": {"trt": "10.3"},
+                "fps": 60.0,
+                "power_w": 20.0,
+                "cost_usd": 500.0,
+                "evidence_run_id": "run-1",
+            },
+            {
+                "board": "pi5",
+                "stack": {"hailo": "8"},
+                "fps": 25.0,
+                "power_w": 8.0,
+                "cost_usd": 120.0,
+                "evidence_run_id": "run-2",
+            },
+        ]
+    )
+    out = bom_advise(candidates, "min_fps=30")
+    assert "agx-orin" in out and "pi5" not in out
+    assert "no candidate" in bom_advise(candidates, "min_fps=1000")
+    # errata_scan finds no exposure for a chip absent from the tree.
+    errata = json.dumps([{"id": "E1", "chip": "x", "patterns": ["zzz_no_match"]}])
+    assert isinstance(errata_scan("x", errata), str)
 
 
 def test_host_and_telemetry_tools() -> None:

@@ -260,6 +260,207 @@ async def triage(symptom: str, hw: str = "") -> str:
         await client.aclose()
 
 
+async def upgrade_check(current_stack: str, proposed: str) -> str:
+    """Impact report for a version move: query the matrix for every component
+    that changes between current and proposed. Stacks are 'key=value,...'.
+    Needs the knowledge layer."""
+    from deepgent.knowledge import build_rag_client
+    from deepgent.knowledge import upgrade_check as _upgrade_check
+
+    client = build_rag_client(_settings())
+    try:
+        report = await _upgrade_check(client, _stack(current_stack), _stack(proposed))
+        return report.render()
+    except Exception as exc:
+        return f"knowledge layer unavailable: {exc}"
+    finally:
+        await client.aclose()
+
+
+def bom_advise(candidates: str, constraints: str = "") -> str:
+    """Filter verified stack options to those meeting fps/power/cost limits,
+    cheapest first. candidates is a JSON array of {board, stack, fps, power_w,
+    cost_usd, evidence_run_id}; constraints is 'min_fps=..,max_power_w=..,
+    max_cost_usd=..'. Never invents a stack, only filters measured ones."""
+    from deepgent.knowledge import BomCandidate, BomConstraints
+    from deepgent.knowledge import bom_advise as _bom_advise
+
+    def _num(mapping: dict[str, str], key: str) -> float | None:
+        return float(mapping[key]) if key in mapping else None
+
+    limits = _stack(constraints)
+    constraint = BomConstraints(
+        min_fps=_num(limits, "min_fps"),
+        max_power_w=_num(limits, "max_power_w"),
+        max_cost_usd=_num(limits, "max_cost_usd"),
+    )
+    parsed = [
+        BomCandidate(
+            board=c["board"],
+            stack=c.get("stack", {}),
+            fps=c.get("fps"),
+            power_w=c.get("power_w"),
+            cost_usd=c.get("cost_usd"),
+            evidence_run_id=c["evidence_run_id"],
+        )
+        for c in json.loads(_read(candidates))
+    ]
+    passing = _bom_advise(parsed, constraint)
+    if not passing:
+        return "no candidate stack satisfies the constraints"
+    lines = [
+        f"{c.board}: {c.stack} fps={c.fps} power_w={c.power_w} "
+        f"cost=${c.cost_usd} (evidence {c.evidence_run_id})"
+        for c in passing
+    ]
+    return "\n".join(lines)
+
+
+def errata_scan(chips: str, errata: str) -> str:
+    """Scan the working tree for code patterns from chip errata affecting a BOM.
+    chips is a comma list of chip ids; errata is a JSON array of
+    {id, chip, title, patterns[], advisory}, inline or a file path."""
+    from deepgent.knowledge import Erratum, scan_errata
+
+    entries = json.loads(_read(errata))
+    defs = [
+        Erratum(
+            id=e["id"],
+            chip=e["chip"],
+            title=e.get("title", ""),
+            patterns=tuple(e["patterns"]),
+            advisory=e.get("advisory", ""),
+        )
+        for e in entries
+    ]
+    result = scan_errata(Path.cwd(), defs, {c for c in _csv(chips)})
+    return result.render_advisory()
+
+
+async def scaffold_driver(device: str, compatible: str, chip: str, kind: str = "i2c") -> str:
+    """Scaffold a RAG-grounded driver skeleton (i2c or v4l2) plus a device-tree
+    fragment for a peripheral. Grounds register facts in the datasheet RAG, so
+    it needs the knowledge layer."""
+    from deepgent.generators import scaffold_driver as _scaffold_driver
+    from deepgent.generators import spec_from_chunks
+    from deepgent.knowledge import build_rag_client
+
+    client = build_rag_client(_settings())
+    try:
+        chunks = await client.search(f"{device} registers i2c address", chip=chip)
+    except Exception as exc:
+        return f"knowledge layer unavailable: {exc}"
+    finally:
+        await client.aclose()
+    out = _scaffold_driver(spec_from_chunks(device, compatible, kind, chunks))
+    blocks = [f"=== {rel} ===\n{content}" for rel, content in out.files.items()]
+    return "\n\n".join(blocks) + "\n\nnext:\n" + "\n".join(f"- {t}" for t in out.todos)
+
+
+# --- on-target runners (continued) -----------------------------------------
+
+
+async def shadow(
+    board: str,
+    fixture: str,
+    incumbent: str,
+    candidate: str,
+    remote_path: str = "/tmp/deepgent-shadow/stream.bin",
+    kind: str = "detection",
+    iou: float = 0.5,
+) -> str:
+    """Replay a recorded fixture through an incumbent and a candidate model on a
+    board and diff their behavior. Requires a registered board and a fixture
+    recorded with the replay tool."""
+    from deepgent.evals.shadow import ShadowRunner
+
+    try:
+        run_dir = _run_dir(f"shadow-{board}")
+        diff = await ShadowRunner(board, Path.cwd()).run(
+            fixture, incumbent, candidate, remote_path, run_dir, kind, iou
+        )
+        return diff.render()
+    except _DeepgentError as exc:
+        return f"error: {exc}"
+
+
+async def replay(
+    action: str,
+    name: str = "",
+    board: str = "",
+    command: str = "",
+    remote_path: str = "",
+) -> str:
+    """Record real sensor streams as deterministic fixtures, replay them, or
+    list them. action is record|replay|list. record/replay need name, board,
+    command, and remote_path, and a registered board."""
+    from deepgent.evals.replay import ReplayRecorder, list_fixtures
+
+    if action == "list":
+        fixtures = list_fixtures(Path.cwd())
+        if not fixtures:
+            return "no fixtures recorded"
+        return "\n".join(f"{m.name}  {m.board}  {m.sha256[:12]}  {m.size_bytes}B" for m in fixtures)
+    if action not in {"record", "replay"}:
+        return f"error: unknown action '{action}'; use record, replay, or list"
+    if not (name and board and command and remote_path):
+        return "error: record/replay need name, board, command, and remote_path"
+    try:
+        recorder = ReplayRecorder(board, Path.cwd())
+        if action == "record":
+            m = await recorder.record(name, command, remote_path)
+            return f"recorded {name} ({m.sha256[:12]}, {m.size_bytes}B)"
+        exit_status, output = await recorder.replay(name, command, remote_path)
+        return f"[exit {exit_status}]\n{output}"
+    except _DeepgentError as exc:
+        return f"error: {exc}"
+
+
+async def bisect(task: str, good: str, bad: str) -> str:
+    """Auto-bisect a regressed golden across commits between good and bad to the
+    breaking change. Runs the golden as the predicate at each revision and
+    restores the original branch afterward. Requires a git repo with the
+    golden; on-target goldens also require a registered board."""
+    import subprocess
+
+    from deepgent.evals import run_golden
+    from deepgent.evals.bisect import bisect as _bisect
+
+    try:
+        revs = subprocess.run(
+            ["git", "rev-list", "--reverse", f"{good}..{bad}"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.split()
+    except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+        return f"error: cannot list commits {good}..{bad}: {exc}"
+    candidates = [good, *revs]
+    if candidates[-1] != bad:
+        candidates.append(bad)
+    if len(candidates) < 2:
+        return f"error: no commits between {good} and {bad}"
+
+    async def predicate(rev: str) -> bool:
+        subprocess.run(["git", "checkout", "--quiet", rev], check=True)
+        return (await run_golden(task, Path.cwd())).passed
+
+    original = subprocess.run(
+        ["git", "rev-parse", "--abbrev-ref", "HEAD"], capture_output=True, text=True
+    ).stdout.strip()
+    try:
+        result = await _bisect(candidates, predicate)
+    except _DeepgentError as exc:
+        return f"error: {exc}"
+    finally:
+        if original and original != "HEAD":
+            subprocess.run(["git", "checkout", "--quiet", original], check=False)
+    report = result.render_report()
+    if result.first_bad:
+        report += f"\nbreaking change: {result.first_bad}"
+    return report
+
+
 # --- on-target runners (need a registered board; error if unavailable) ------
 
 
@@ -483,6 +684,8 @@ _DETERMINISTIC = (
     reflect,
     generate_ros2_node,
     generate_systemd,
+    errata_scan,
+    bom_advise,
     host_doctor,
     host_profile,
     telemetry_summary,
@@ -493,6 +696,8 @@ _DETERMINISTIC = (
 _KNOWLEDGE = (
     premortem,
     triage,
+    upgrade_check,
+    scaffold_driver,
 )
 
 # Execute on a registered target board over SSH; return an error if none is
@@ -508,6 +713,9 @@ _HARDWARE = (
     accuracy_gate,
     quant_sweep,
     select_model,
+    shadow,
+    replay,
+    bisect,
 )
 
 

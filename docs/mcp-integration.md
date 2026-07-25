@@ -44,11 +44,15 @@ either inline JSON or a path to a file with that JSON; comma lists are plain
 - `host_profile()` - detected device class, arch, accelerator, cpu, ram
 - `telemetry_summary()` - task counts, success rate, spend, learned calibrations
 - `boards_list()` - the registered target boards
+- `errata_scan(chips, errata)` - scan the tree for chip-errata code patterns
+- `bom_advise(candidates, constraints?)` - filter verified stacks to a fps/power/cost budget
 
 ### Knowledge layer (returns a note if the knowledge server is not configured)
 
 - `premortem(symptom, hw?, stack?)` - corpus + matrix failure-mode pre-mortem
 - `triage(symptom, hw?)` - corpus-first debugging before any LLM reasoning
+- `upgrade_check(current_stack, proposed)` - matrix impact report for a version move
+- `scaffold_driver(device, compatible, chip, kind?)` - RAG-grounded driver + DT fragment
 
 ### On-target runners (need a registered board; return an error if none is reachable)
 
@@ -65,6 +69,9 @@ captures metrics under `.deepgent/runs/`.
 - `accuracy_gate(board, command, metric, baseline?, tolerance?, capture?)` - on-device eval gate
 - `quant_sweep(board, command, precisions?, batches?, devices?, accuracy_metric?, capture?)` - precision Pareto sweep
 - `select_model(board, manifest, ...)` - pick candidates meeting a deploy budget
+- `shadow(board, fixture, incumbent, candidate, remote_path?, kind?, iou?)` - diff two models on a replayed fixture
+- `replay(action, name?, board?, command?, remote_path?)` - record/replay/list sensor-stream fixtures
+- `bisect(task, good, bad)` - auto-bisect a regressed golden to the breaking commit
 
 ### Gated (only with `--allow-task`, because it costs API and edits files)
 
