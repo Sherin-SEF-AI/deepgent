@@ -226,6 +226,35 @@ def boards_list() -> str:
     return "\n".join(lines)
 
 
+def skills_author(tuples: str = "", min_cluster: int = 3) -> str:
+    """Draft SKILL.md candidates from clustered failure-corpus tuples (Tier 3).
+    tuples is a JSON array of {symptom, root_cause, fix, verification_run_id},
+    inline or a path; when omitted, the local telemetry corpus (approved
+    candidates) is used. Returns the drafted markdown for review; writes
+    nothing. The human PR gate remains the only path to a trusted skill."""
+    from deepgent.knowledge import cluster_tuples
+    from deepgent.telemetry import TelemetryStore
+
+    if tuples:
+        rows = json.loads(_read(tuples))
+    else:
+        rows = [
+            {
+                "symptom": c.symptom,
+                "root_cause": c.root_cause,
+                "fix": c.fix_diff_ref,
+                "verification_run_id": c.session_id,
+            }
+            for c in TelemetryStore().corpus_candidates(approved=True)
+        ]
+    if not rows:
+        return "no corpus tuples to draft from"
+    candidates = cluster_tuples(rows, min_cluster)
+    if not candidates:
+        return f"no theme reached {min_cluster} tuples; nothing drafted"
+    return "\n\n".join(c.render_skill_md() for c in candidates)
+
+
 # --- knowledge / RAG products (degrade gracefully) -------------------------
 
 
@@ -686,6 +715,7 @@ _DETERMINISTIC = (
     generate_systemd,
     errata_scan,
     bom_advise,
+    skills_author,
     host_doctor,
     host_profile,
     telemetry_summary,

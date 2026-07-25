@@ -1365,6 +1365,84 @@ def skills_list(
         typer.echo(f"{pack.name}  {pack.description}")
 
 
+def _corpus_tuples_from_telemetry(approved_only: bool) -> list[dict[str, Any]]:
+    """Resolved corpus candidates from the local telemetry store, shaped as the
+    tuples the skill drafter consumes."""
+    from deepgent.telemetry import TelemetryStore
+
+    store = TelemetryStore()
+    approved = True if approved_only else None
+    return [
+        {
+            "symptom": c.symptom,
+            "root_cause": c.root_cause,
+            "fix": c.fix_diff_ref,
+            "verification_run_id": c.session_id,
+        }
+        for c in store.corpus_candidates(approved=approved)
+    ]
+
+
+@skills_app.command("author")
+def skills_author_cmd(
+    from_file: Path | None = typer.Option(
+        None, "--from", help="JSON array of corpus tuples; defaults to the telemetry corpus."
+    ),
+    min_cluster: int = typer.Option(3, "--min-cluster", help="Minimum tuples per skill draft."),
+    skills_dir: Path | None = typer.Option(
+        None, "--skills-dir", help="Where to write drafts; defaults to the checkout skills/ dir."
+    ),
+    include_unapproved: bool = typer.Option(
+        False, "--include-unapproved", help="Also draft from unapproved corpus candidates."
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Preview drafts without writing any file."
+    ),
+    debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
+) -> None:
+    """Draft SKILL.md candidates from clustered failure-corpus tuples (Tier 3).
+
+    Drafting is pre-review: files land in a '<name>-draft/' dir and never shadow
+    a reviewed pack. The human gate (PR review) stays the only path to trust.
+    """
+    import json as json_module
+
+    from deepgent.knowledge import cluster_tuples, draft_skill_candidates
+
+    _configure_logging(debug, quiet=not debug)
+    try:
+        if from_file is not None:
+            if not from_file.is_file():
+                _fail(f"{from_file} does not exist", debug=debug)
+            tuples = json_module.loads(from_file.read_text())
+        else:
+            tuples = _corpus_tuples_from_telemetry(approved_only=not include_unapproved)
+    except (DeepgentError, json_module.JSONDecodeError) as exc:
+        _fail(str(exc), debug=debug, exc=exc if isinstance(exc, DeepgentError) else None)
+        return
+
+    if not tuples:
+        typer.echo("no corpus tuples to draft from")
+        return
+
+    candidates = cluster_tuples(tuples, min_cluster)
+    if not candidates:
+        typer.echo(f"no theme reached {min_cluster} tuples; nothing drafted")
+        return
+
+    if dry_run:
+        for candidate in candidates:
+            typer.secho(f"{candidate.name}  ({len(candidate.tuples)} tuples)", fg=typer.colors.CYAN)
+        typer.echo(f"{len(candidates)} draft(s) would be written (--dry-run)")
+        return
+
+    target = skills_dir or default_skills_dir() or (Path.cwd() / "skills")
+    written = draft_skill_candidates(tuples, target, min_cluster)
+    for path in written:
+        typer.secho(f"drafted {path}", fg=typer.colors.GREEN)
+    typer.echo(f"{len(written)} draft(s) written; review and open a PR before trusting them")
+
+
 _HOST_CLASS_ENV = "DEEPGENT_HOST__DEVICE_CLASS"
 _HOST_TOOLCHAIN_ENV = "DEEPGENT_HOST__TOOLCHAIN"
 

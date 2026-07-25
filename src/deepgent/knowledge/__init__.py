@@ -52,6 +52,11 @@ from deepgent.knowledge.rag import (
     build_knowledge_tools,
     build_rag_client,
 )
+from deepgent.knowledge.skill_author import (
+    SkillCandidate,
+    cluster_tuples,
+    draft_skill_candidates,
+)
 from deepgent.knowledge.skill_lifecycle import (
     AblationRecord,
     LifecycleReport,
@@ -89,6 +94,7 @@ __all__ = [
     "PredictedRisk",
     "RagClient",
     "Rail",
+    "SkillCandidate",
     "SkillMetric",
     "SkillPack",
     "TriageResult",
@@ -105,9 +111,11 @@ __all__ = [
     "build_knowledge_tools",
     "build_rag_client",
     "check_conflicts",
+    "cluster_tuples",
     "confidence_for",
     "default_skills_dir",
     "detect_contradictions",
+    "draft_skill_candidates",
     "evaluate_skills",
     "hop_distance",
     "list_skills",

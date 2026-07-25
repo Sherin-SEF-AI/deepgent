@@ -46,6 +46,7 @@ either inline JSON or a path to a file with that JSON; comma lists are plain
 - `boards_list()` - the registered target boards
 - `errata_scan(chips, errata)` - scan the tree for chip-errata code patterns
 - `bom_advise(candidates, constraints?)` - filter verified stacks to a fps/power/cost budget
+- `skills_author(tuples?, min_cluster?)` - draft SKILL.md candidates from clustered corpus tuples
 
 ### Knowledge layer (returns a note if the knowledge server is not configured)
 

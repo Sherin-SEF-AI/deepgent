@@ -70,7 +70,7 @@ def test_full_tool_surface_registered() -> None:
         "bisect",
     } <= names
     # Deterministic knowledge/generator products.
-    assert {"errata_scan", "bom_advise"} <= names
+    assert {"errata_scan", "bom_advise", "skills_author"} <= names
     assert "run_task" not in names
 
 
@@ -114,6 +114,26 @@ def test_deterministic_knowledge_products() -> None:
     # errata_scan finds no exposure for a chip absent from the tree.
     errata = json.dumps([{"id": "E1", "chip": "x", "patterns": ["zzz_no_match"]}])
     assert isinstance(errata_scan("x", errata), str)
+
+
+def test_skills_author_drafts_from_tuples() -> None:
+    from deepgent.mcp_server import skills_author
+
+    tuples = json.dumps(
+        [
+            {
+                "symptom": f"tensorrt engine build failed case {i}",
+                "root_cause": "workspace too small",
+                "fix": "raise workspace",
+                "verification_run_id": f"run-{i}",
+            }
+            for i in range(3)
+        ]
+    )
+    out = skills_author(tuples, min_cluster=3)
+    assert "corpus-tensorrt" in out and "Human review required" in out
+    # Below the cluster threshold nothing is drafted.
+    assert "nothing drafted" in skills_author(tuples, min_cluster=5)
 
 
 def test_host_and_telemetry_tools() -> None:

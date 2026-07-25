@@ -137,3 +137,58 @@ def test_doctor_fails_without_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
     result = runner.invoke(app, ["doctor"])
     assert result.exit_code == 1
     assert "ANTHROPIC_API_KEY is not set" in result.output
+
+
+@pytest.mark.unit
+def test_skills_author_dry_run_from_file(tmp_path: Path) -> None:
+    import json
+
+    tuples = tmp_path / "tuples.json"
+    tuples.write_text(
+        json.dumps(
+            [
+                {
+                    "symptom": f"cuda kernel launch failed {i}",
+                    "root_cause": "bad grid dim",
+                    "fix": "clamp grid",
+                    "verification_run_id": f"run-{i}",
+                }
+                for i in range(3)
+            ]
+        )
+    )
+    result = runner.invoke(
+        app, ["skills", "author", "--from", str(tuples), "--dry-run", "--min-cluster", "3"]
+    )
+    assert result.exit_code == 0, result.output
+    assert "corpus-cuda" in result.output
+    assert "would be written" in result.output
+
+
+@pytest.mark.unit
+def test_skills_author_writes_draft(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import json
+
+    monkeypatch.chdir(tmp_path)
+    tuples = tmp_path / "tuples.json"
+    tuples.write_text(
+        json.dumps(
+            [
+                {
+                    "symptom": f"dma buffer overrun {i}",
+                    "root_cause": "undersized ring",
+                    "fix": "grow ring",
+                    "verification_run_id": f"run-{i}",
+                }
+                for i in range(3)
+            ]
+        )
+    )
+    out_dir = tmp_path / "skills"
+    result = runner.invoke(
+        app, ["skills", "author", "--from", str(tuples), "--skills-dir", str(out_dir)]
+    )
+    assert result.exit_code == 0, result.output
+    draft = out_dir / "corpus-dma-draft" / "SKILL.md"
+    assert draft.is_file()
+    assert "corpus-drafted, unreviewed" in draft.read_text()
