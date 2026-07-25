@@ -20,6 +20,11 @@ l4t = "39.2"
 cuda = "13.2.1"
 tensorrt = "10.16.2"
 
+[local]                # x86_64 host CUDA eval line for gt-0002 (local dGPU).
+                       # devel image carries nvcc; gt-0002 embeds PTX so the
+                       # host driver JITs to whatever GPU is installed.
+cuda_image = "nvidia/cuda:12.6.2-devel-ubuntu24.04"
+
 [ros2]
 default = "jazzy"      # containerized; mature ecosystem on Ubuntu 24.04
 lts_latest = "lyrical" # released 2026-05, Ubuntu 26.04; adopt via containers

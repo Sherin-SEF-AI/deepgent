@@ -11,6 +11,7 @@ import structlog
 
 from deepgent.errors import GoldenError
 from deepgent.evals.gt0001 import run_gt_0001
+from deepgent.evals.gt0002 import run_gt_0002
 from deepgent.evals.schema import CriterionResult, GoldenTask, load_golden, score
 
 _logger = structlog.get_logger(__name__)
@@ -25,6 +26,7 @@ GoldenImpl = Callable[[GoldenTask, Path], Awaitable[dict[str, float]]]
 # with the board-farm MCP (Phase 2).
 IMPLEMENTATIONS: dict[str, GoldenImpl] = {
     "bringup/cuda-smoke": run_gt_0001,
+    "bringup/cuda-smoke-local": run_gt_0002,
 }
 
 

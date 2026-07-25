@@ -52,6 +52,8 @@ def test_versions_manifest_is_complete() -> None:
     jp7 = versions["jetson"]["jp7"]
     assert set(jp7) == {"jetpack", "l4t", "cuda", "tensorrt"}
 
+    assert set(versions["local"]) == {"cuda_image"}
+
     ros2 = versions["ros2"]
     assert set(ros2) == {"default", "lts_latest", "jp6_native"}
 

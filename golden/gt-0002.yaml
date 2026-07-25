@@ -1,0 +1,29 @@
+# Phase 0 golden (local variant): build and run the trivial CUDA kernel on the
+# host's discrete GPU, capturing generic nvidia-smi telemetry. The x86
+# counterpart to gt-0001, for hosts with a CUDA GPU and docker --gpus all
+# (nvidia-container-toolkit). See docs/knowledge-server.md siblings and
+# versions.toml [local].
+id: gt-0002
+title: Build and run vector_add on the local GPU with nvidia-smi capture
+class: bringup/cuda-smoke-local
+board: local
+skills: []
+inputs: {}
+success:
+  - metric: build_ok
+    op: "=="
+    value: 1
+  - metric: run_exit_code
+    op: "=="
+    value: 0
+  - metric: kernel_ok
+    op: "=="
+    value: 1
+  - metric: samples
+    op: ">="
+    value: 3
+  - metric: wall_s
+    op: "<="
+    value: 30
+budget_usd: 0.00
+timeout_min: 10
