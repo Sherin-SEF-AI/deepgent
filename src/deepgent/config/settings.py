@@ -106,6 +106,9 @@ class DeepgentSettings(BaseSettings):
     # Gather a corpus/matrix pre-mortem during context assembly and prepend it
     # to the task (#11). No-ops gracefully when the knowledge layer is absent.
     premortem_enabled: bool = True
+    # Run the critic agent as a final adversarial gate on risk-tier >= 2 tasks
+    # (expansion spec A1). A veto turns a task's outcome into an error.
+    critic_enabled: bool = True
 
 
 class _MappingSource(PydanticBaseSettingsSource):

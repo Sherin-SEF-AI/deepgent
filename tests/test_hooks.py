@@ -242,7 +242,10 @@ class TestRegistry:
             "PostToolUse",
             "PostToolUseFailure",
         }
-        pre = hooks["PreToolUse"][0]
-        assert pre.matcher == "mcp__board_farm__.*"
-        for matchers in hooks.values():
-            assert all(m.hooks for m in matchers)
+        # Two PreToolUse matchers: the catch-all tool-exclusivity gate and the
+        # board-farm safety gate.
+        matchers = [m.matcher for m in hooks["PreToolUse"]]
+        assert None in matchers  # exclusivity_gate fires on every tool call
+        assert "mcp__board_farm__.*" in matchers  # safety_gate
+        for matcher_list in hooks.values():
+            assert all(m.hooks for m in matcher_list)

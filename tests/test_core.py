@@ -164,3 +164,89 @@ def test_run_task_emits_tool_events(
     assert [e.kind for e in events] == ["tool_use", "tool_result"]
     assert events[0].name == "Edit" and events[0].detail == "src/a.py"
     assert events[1].name == "Edit" and events[1].is_error is False
+
+
+# --- classifier wiring + critic veto (expansion spec A1) --------------------
+
+
+@pytest.mark.unit
+def test_build_options_routes_model_and_agents(settings: DeepgentSettings, tmp_path: Path) -> None:
+    from deepgent.core.classifier import classify
+
+    orch = Orchestrator(settings=settings, cwd=tmp_path)
+    # A safety task routes to opus and loads the safety auditor + critic.
+    options = orch.build_options(classification=classify("safety review of firmware.c"))
+    assert options.model == settings.models.opus
+    assert options.agents is not None
+    assert "safety-auditor" in options.agents and "critic" in options.agents
+
+
+@pytest.mark.unit
+def test_parse_critic_verdict() -> None:
+    from deepgent.core import parse_critic_verdict
+
+    assert parse_critic_verdict("looks good\nCRITIC_VERDICT: PASS").vetoed is False
+    v = parse_critic_verdict("found a stub\nCRITIC_VERDICT: VETO: contains a placeholder")
+    assert v.vetoed is True and "placeholder" in v.reason
+    # No verdict line -> fail-open pass.
+    assert parse_critic_verdict("no verdict here").vetoed is False
+
+
+def _two_pass_query(main_error: bool, critic_text: str) -> Any:
+    """A fake query that answers the main pass, then the critic pass by prompt."""
+
+    async def fake_query(**kwargs: Any) -> AsyncIterator[Any]:
+        prompt = str(kwargs.get("prompt", ""))
+        if "CRITIC_VERDICT" in prompt:  # the critic pass
+            yield AssistantMessage(content=[TextBlock(text="auditing")], model="m")
+            yield _result_message(result=critic_text, session_id="sess-critic")
+        else:  # the main pass
+            yield AssistantMessage(content=[TextBlock(text="working")], model="m")
+            yield _result_message(is_error=main_error, result="done")
+
+    return fake_query
+
+
+@pytest.mark.unit
+def test_critic_veto_turns_success_into_error(
+    settings: DeepgentSettings, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(
+        orchestrator_module,
+        "_run_query",
+        _two_pass_query(main_error=False, critic_text="CRITIC_VERDICT: VETO: found a stub"),
+    )
+    # "optimize the tensorrt latency" -> risk tier 2 -> critic runs.
+    outcome = _run(Orchestrator(settings=settings, cwd=tmp_path), "optimize the tensorrt latency")
+    assert outcome.is_error is True
+    assert "CRITIC VETO" in outcome.result and "found a stub" in outcome.result
+
+
+@pytest.mark.unit
+def test_critic_pass_leaves_success(
+    settings: DeepgentSettings, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(
+        orchestrator_module,
+        "_run_query",
+        _two_pass_query(main_error=False, critic_text="CRITIC_VERDICT: PASS"),
+    )
+    outcome = _run(Orchestrator(settings=settings, cwd=tmp_path), "optimize the tensorrt latency")
+    assert outcome.is_error is False
+
+
+@pytest.mark.unit
+def test_low_risk_task_skips_critic(
+    settings: DeepgentSettings, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    calls: list[str] = []
+
+    async def counting_query(**kwargs: Any) -> AsyncIterator[Any]:
+        calls.append(str(kwargs.get("prompt", "")))
+        yield AssistantMessage(content=[TextBlock(text="working")], model="m")
+        yield _result_message()
+
+    monkeypatch.setattr(orchestrator_module, "_run_query", counting_query)
+    _run(Orchestrator(settings=settings, cwd=tmp_path), "rename a local variable")
+    # Generic risk-1 task: one pass only, no critic.
+    assert len(calls) == 1

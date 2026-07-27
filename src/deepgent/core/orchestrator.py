@@ -1,5 +1,6 @@
 """One-shot task orchestration over the Claude Agent SDK."""
 
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -21,9 +22,10 @@ from claude_agent_sdk import (
 )
 from claude_agent_sdk.types import McpServerConfig
 
-from deepgent.agents import build_agent_definitions
+from deepgent.agents import build_agent_definitions, select_agents
 from deepgent.config import DeepgentSettings
 from deepgent.core.budget import BudgetTracker
+from deepgent.core.classifier import TaskClassification, classify
 from deepgent.errors import TaskExecutionError
 
 _logger = structlog.get_logger(__name__)
@@ -91,6 +93,53 @@ class TaskOutcome:
     session_id: str
 
 
+@dataclass(frozen=True)
+class CriticVerdict:
+    """The critic's ruling on a completed task (expansion spec A1)."""
+
+    vetoed: bool
+    reason: str
+
+
+# The critic must terminate its reply with one of these lines.
+_VERDICT_RE = re.compile(r"CRITIC_VERDICT:\s*(PASS|VETO)(?::\s*(.*))?", re.IGNORECASE)
+
+_CRITIC_INSTRUCTION = """\
+You are the deepgent critic, the final adversarial gate. Audit the working-tree
+diff for the task below. Run `git diff` (and `git status`) to see the change,
+read any files you need, and judge whether it is production-grade per the prime
+directives: no stubs, placeholders, mock data, simulated results, TODO/FIXME,
+silent fallbacks, unreachable or untested branches, fabricated hardware facts,
+or claims of hardware behavior not measured on hardware. Do not edit anything.
+
+End your reply with exactly one line and nothing after it:
+  CRITIC_VERDICT: PASS
+or
+  CRITIC_VERDICT: VETO: <one-line reason>
+When in doubt, veto.
+
+Task under audit:
+{task}
+"""
+
+
+def parse_critic_verdict(text: str) -> CriticVerdict:
+    """Parse the critic's terminal verdict line.
+
+    A missing or unparseable verdict is treated as PASS (the critic is
+    fail-open on parse so a flaky audit never blocks a legitimate task); the
+    caller logs the ambiguity. An explicit VETO always blocks.
+    """
+    matches = list(_VERDICT_RE.finditer(text or ""))
+    if not matches:
+        return CriticVerdict(vetoed=False, reason="no explicit verdict; treated as pass")
+    last = matches[-1]
+    if last.group(1).upper() == "VETO":
+        reason = (last.group(2) or "").strip() or "critic vetoed without a stated reason"
+        return CriticVerdict(vetoed=True, reason=reason)
+    return CriticVerdict(vetoed=False, reason="")
+
+
 class Orchestrator:
     """Runs tasks through query() with explicitly pinned session options."""
 
@@ -148,9 +197,25 @@ class Orchestrator:
         _logger.info("premortem_applied", risks=len(report.risks))
         return f"{prelude}\n{task}"
 
-    def build_options(self, tracker: BudgetTracker | None = None) -> ClaudeAgentOptions:
+    def _resolve_model(self, tier: str) -> str:
+        """Map a classifier model tier to the pinned model id (section 9)."""
+        tiers = self._settings.models
+        return {"opus": tiers.opus, "sonnet": tiers.sonnet, "haiku": tiers.haiku}.get(
+            tier, tiers.sonnet
+        )
+
+    def build_options(
+        self,
+        tracker: BudgetTracker | None = None,
+        classification: TaskClassification | None = None,
+    ) -> ClaudeAgentOptions:
         """Session options with every field from CLAUDE.md section 7 set
-        explicitly; nothing relies on ambient defaults."""
+        explicitly; nothing relies on ambient defaults.
+
+        With a classification, specialists are loaded for the task class and
+        the model tier is routed accordingly (section 9). Without one, the
+        five core agents run on the sonnet tier (the pre-classifier default).
+        """
         # Deferred import: hooks depend on core.budget, so a module-level
         # import here would make deepgent.hooks unimportable on its own.
         from deepgent.boards import build_board_farm_server
@@ -169,20 +234,24 @@ class Orchestrator:
         knowledge_server = build_knowledge_server(self._settings)
         if knowledge_server is not None:
             mcp_servers["knowledge"] = knowledge_server
+        if classification is None:
+            agents = build_agent_definitions(self._settings, skill_names)
+            model = self._settings.models.sonnet
+        else:
+            agents = select_agents(self._settings, classification, skill_names)
+            model = self._resolve_model(classification.model_tier)
         return ClaudeAgentOptions(
             allowed_tools=list(MAIN_SESSION_TOOLS),
             disallowed_tools=[],
             permission_mode=self._settings.permission_mode,
             mcp_servers=mcp_servers,
-            agents=build_agent_definitions(self._settings, skill_names),
+            agents=agents,
             hooks=build_hooks(self._settings, tracker, self._telemetry_store()),
             setting_sources=["project"],
             cwd=self._cwd,
             max_turns=self._max_turns,
             skills=skill_names or None,
-            # Deterministic intake routing (section 9) arrives with the
-            # classifier; until then every task runs on the sonnet tier.
-            model=self._settings.models.sonnet,
+            model=model,
         )
 
     async def run_task(
@@ -200,9 +269,16 @@ class Orchestrator:
         import time
 
         tracker = BudgetTracker(self._settings, calibration=self._budget_calibration())
-        options = self.build_options(tracker)
+        classification = classify(task)
+        options = self.build_options(tracker, classification)
         log = _logger.bind(cwd=str(self._cwd), model=options.model)
-        log.info("task_started", task=task)
+        log.info(
+            "task_started",
+            task=task,
+            task_class=classification.task_class,
+            risk_tier=classification.risk_tier,
+            specialists=list(classification.specialists),
+        )
         started = time.monotonic()
 
         prompt = await self._with_premortem(task)
@@ -248,22 +324,81 @@ class Orchestrator:
                 "interrupted before completion"
             )
 
+        # critic gate (expansion spec A1): a veto on a risk-tier >= 2 task
+        # turns a successful run into an error. It never rescues a failed run.
+        result_text = result.result or ""
+        is_error = result.is_error
+        if not result.is_error and self._settings.critic_enabled and classification.risk_tier >= 2:
+            verdict = await self._run_critic(task, tracker)
+            if verdict.vetoed:
+                is_error = True
+                result_text = f"{result_text}\n\nCRITIC VETO: {verdict.reason}".strip()
+                log.warning("critic_veto", reason=verdict.reason)
+            else:
+                log.info("critic_pass")
+
         log.info(
             "task_finished",
-            is_error=result.is_error,
+            is_error=is_error,
             num_turns=result.num_turns,
             total_cost_usd=result.total_cost_usd,
         )
-        self._record_task(result, tracker, time.monotonic() - started)
+        self._record_task(
+            result,
+            tracker,
+            time.monotonic() - started,
+            task_class=classification.task_class,
+            is_error=is_error,
+        )
         return TaskOutcome(
-            result=result.result or "",
-            is_error=result.is_error,
+            result=result_text,
+            is_error=is_error,
             num_turns=result.num_turns,
             total_cost_usd=result.total_cost_usd,
             session_id=result.session_id,
         )
 
-    def _record_task(self, result: ResultMessage, tracker: BudgetTracker, wall_s: float) -> None:
+    def _critic_options(self, tracker: BudgetTracker) -> ClaudeAgentOptions:
+        """Read-only session for the critic pass: opus tier, no subagents, only
+        the tools needed to inspect the working-tree diff."""
+        from deepgent.hooks import build_hooks
+
+        return ClaudeAgentOptions(
+            allowed_tools=["Read", "Grep", "Bash"],
+            disallowed_tools=[],
+            permission_mode=self._settings.permission_mode,
+            mcp_servers={},
+            agents={},
+            hooks=build_hooks(self._settings, tracker, self._telemetry_store()),
+            setting_sources=["project"],
+            cwd=self._cwd,
+            max_turns=min(self._max_turns, 12),
+            model=self._settings.models.opus,
+        )
+
+    async def _run_critic(self, task: str, tracker: BudgetTracker) -> CriticVerdict:
+        """Run the adversarial critic pass and parse its verdict."""
+        options = self._critic_options(tracker)
+        prompt = _CRITIC_INSTRUCTION.format(task=task)
+        result: ResultMessage | None = None
+        async for message in _run_query(prompt=prompt, options=options):
+            if isinstance(message, AssistantMessage):
+                tracker.record_usage(message.model, message.usage)
+            elif isinstance(message, ResultMessage):
+                result = message
+        if result is None:
+            _logger.warning("critic_no_result")
+            return CriticVerdict(vetoed=False, reason="critic produced no result; treated as pass")
+        return parse_critic_verdict(result.result or "")
+
+    def _record_task(
+        self,
+        result: ResultMessage,
+        tracker: BudgetTracker,
+        wall_s: float,
+        task_class: str = "task/oneshot",
+        is_error: bool | None = None,
+    ) -> None:
         """Every task emits telemetry (section 1); best-effort, never fatal."""
         from deepgent.telemetry import TaskRecord
 
@@ -272,13 +407,14 @@ class Orchestrator:
             return
         import time
 
+        task_error = result.is_error if is_error is None else is_error
         store.record_task(
             TaskRecord(
                 id=result.session_id,
                 ts=time.time(),
-                # The deterministic intake classifier assigns real classes
-                # later; every one-shot task shares a class until then.
-                task_class="task/oneshot",
+                # Real class from the deterministic intake classifier; a critic
+                # veto is reflected via is_error below.
+                task_class=task_class,
                 board=self._settings.default_board,
                 model_mix=tracker.model_mix,
                 tokens=tracker.total_tokens,
@@ -286,6 +422,6 @@ class Orchestrator:
                 est_usd=tracker.spent_usd,
                 wall_s=wall_s,
                 loops=result.num_turns,
-                outcome="error" if result.is_error else "success",
+                outcome="error" if task_error else "success",
             )
         )

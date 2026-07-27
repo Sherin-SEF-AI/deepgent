@@ -7,6 +7,7 @@ from deepgent.config import DeepgentSettings
 from deepgent.core.budget import BudgetTracker
 from deepgent.hooks.budget_guard import make_budget_guard
 from deepgent.hooks.cuda_gate import make_cuda_gate
+from deepgent.hooks.exclusivity_gate import exclusivity_gate
 from deepgent.hooks.fact_guard import KNOWLEDGE_TOOL_PREFIX, fact_guard
 from deepgent.hooks.misra_gate import make_misra_gate
 from deepgent.hooks.reflexion_tap import make_reflexion_tap
@@ -25,10 +26,13 @@ def build_hooks(
     hooks: dict[HookEvent, list[HookMatcher]] = {
         "UserPromptSubmit": [HookMatcher(hooks=[scope_lock])],
         "PreToolUse": [
+            # Delegation-contract tool exclusivity fires on every tool call and
+            # self-filters by agent_type (expansion spec A1).
+            HookMatcher(hooks=[exclusivity_gate]),
             HookMatcher(
                 matcher=f"{BOARD_FARM_TOOL_PREFIX}.*",
                 hooks=[make_safety_gate(settings)],
-            )
+            ),
         ],
         "PostToolUse": [
             HookMatcher(hooks=[make_budget_guard(tracker)]),
