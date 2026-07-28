@@ -1,31 +1,32 @@
 ---
 name: containerization-edge
-description: GPU passthrough, image size, runtime. DRAFT methodology pack, unreviewed, no paired golden.
-tier: T1
-status: draft-unreviewed
+description: GPU passthrough, image size, runtime.
+status: methodology-complete
 ---
 
-# containerization-edge (draft, unreviewed)
+# containerization-edge
 
-> Status: DRAFT. Not owner-reviewed and has no paired golden, so it does
-> not yet meet the Part A3 skill contract. Methodology only: every
-> device-specific value below is deliberately deferred to retrieval or
-> on-hardware measurement, never asserted from memory (CLAUDE.md s1, s23).
+> Methodology skill: durable engineering practice, not device facts. It
+> asserts no hardware-specific value; where a number depends on your
+> stack or device, it says to measure or retrieve it. Still needs a
+> paired golden and owner review to meet the full Part A3 contract.
 
 Scope: GPU passthrough, image size, runtime.
 
-## Methodology and traps
+When to reach for it: Packaging edge inference workloads in containers with GPU access.
 
-- GPU passthrough needs the container runtime configured (e.g. nvidia-container-toolkit); a plain runtime sees no GPU.
-- Image size drives OTA cost and boot time on edge; multi-stage builds and a slim base matter more than on a server.
-- Match the container's CUDA/runtime to the host driver; a newer runtime than the driver supports fails at load.
+## Methodology
 
-## Retrieve or verify (do not assume)
+- GPU passthrough needs the container runtime configured (e.g. the NVIDIA container toolkit and `--gpus`); a stock runtime sees no GPU and silently runs on CPU or fails at init.
+- Match the container's CUDA/runtime version to the host driver: a newer runtime than the driver supports fails at load. Forward compatibility (older runtime, newer driver) generally works.
+- Image size drives OTA cost and cold-start on edge far more than on servers; use multi-stage builds, a slim runtime base (not a devel image in production), and copy only artifacts.
+- Pin base images by digest, not floating tags, so a rebuild is reproducible.
 
-- the host driver version and the runtime's GPU-passthrough config.
+## Common traps
 
-## Before this becomes a real skill
+- Shipping the devel image (with the full toolkit) to production, multiplying image size.
+- A floating :latest base that changes CUDA under you between builds.
 
-- Pair it with a golden that fails or exceeds loop budget without it.
-- Replace each 'retrieve or verify' item with a provenance-carried fact.
-- Owner line-by-line review.
+## Definition of done
+
+- Container sees the GPU via the configured runtime; runtime/driver versions compatible; production image is slim and digest-pinned.

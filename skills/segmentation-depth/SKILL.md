@@ -1,32 +1,33 @@
 ---
 name: segmentation-depth
-description: semantic/instance, mono/stereo depth. DRAFT methodology pack, unreviewed, no paired golden.
-tier: T2
-status: draft-unreviewed
+description: semantic/instance segmentation and mono/stereo depth.
+status: methodology-complete
 ---
 
-# segmentation-depth (draft, unreviewed)
+# segmentation-depth
 
-> Status: DRAFT. Not owner-reviewed and has no paired golden, so it does
-> not yet meet the Part A3 skill contract. Methodology only: every
-> device-specific value below is deliberately deferred to retrieval or
-> on-hardware measurement, never asserted from memory (CLAUDE.md s1, s23).
+> Methodology skill: durable engineering practice, not device facts. It
+> asserts no hardware-specific value; where a number depends on your
+> stack or device, it says to measure or retrieve it. Still needs a
+> paired golden and owner review to meet the full Part A3 contract.
 
-Scope: semantic/instance, mono/stereo depth.
+Scope: semantic/instance segmentation and mono/stereo depth.
 
-## Methodology and traps
+When to reach for it: Dense prediction tasks where the metric and geometry must be pinned first.
 
-- Semantic vs instance vs panoptic change both the head and the metric; fix the task before choosing a model.
-- Stereo depth quality is bounded by baseline, calibration, and texture; measure error vs range, not a single number.
-- Mono depth is scale-ambiguous without a metric cue; know whether downstream needs metric or relative depth.
+## Methodology
 
-## Retrieve or verify (do not assume)
+- Fix the task before the model: semantic (per-pixel class), instance (per-object mask), and panoptic (both) use different heads and different metrics (mIoU vs mask AP vs PQ).
+- For stereo depth, error scales with range and inversely with baseline and texture; report depth error vs range in bins, never a single RMSE.
+- Mono depth is scale-ambiguous; decide whether downstream needs metric depth (then supply a scale cue: camera height, known object, or a metric-trained model) or relative depth.
+- Evaluate segmentation on boundary pixels separately; overall mIoU hides thin-structure and edge failure that matters for free-space and lane use.
 
-- the depth accuracy requirement vs range for the use case.
-- the calibration quality of the stereo rig if used.
+## Common traps
 
-## Before this becomes a real skill
+- A single depth RMSE hides the fact that near-range is fine and far-range is unusable.
+- Class imbalance inflates mIoU when a few large classes dominate; report per-class IoU.
 
-- Pair it with a golden that fails or exceeds loop budget without it.
-- Replace each 'retrieve or verify' item with a provenance-carried fact.
-- Owner line-by-line review.
+## Definition of done
+
+- Depth error reported per range bin; segmentation reported per class and at boundaries.
+- Metric-vs-relative depth decision made explicit and matched to downstream need.

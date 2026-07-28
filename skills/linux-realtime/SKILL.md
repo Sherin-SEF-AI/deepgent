@@ -1,31 +1,32 @@
 ---
 name: linux-realtime
-description: PREEMPT_RT, isolation, affinity, priorities. DRAFT methodology pack, unreviewed, no paired golden.
-tier: T1
-status: draft-unreviewed
+description: PREEMPT_RT, isolation, affinity, priorities.
+status: methodology-complete
 ---
 
-# linux-realtime (draft, unreviewed)
+# linux-realtime
 
-> Status: DRAFT. Not owner-reviewed and has no paired golden, so it does
-> not yet meet the Part A3 skill contract. Methodology only: every
-> device-specific value below is deliberately deferred to retrieval or
-> on-hardware measurement, never asserted from memory (CLAUDE.md s1, s23).
+> Methodology skill: durable engineering practice, not device facts. It
+> asserts no hardware-specific value; where a number depends on your
+> stack or device, it says to measure or retrieve it. Still needs a
+> paired golden and owner review to meet the full Part A3 contract.
 
 Scope: PREEMPT_RT, isolation, affinity, priorities.
 
-## Methodology and traps
+When to reach for it: A workload needs bounded worst-case latency, not just good average.
 
-- PREEMPT_RT lowers worst-case latency, not average; measure max latency under load with cyclictest, not mean.
-- CPU isolation, IRQ affinity, and priority must align; isolating a core but leaving IRQs on it defeats the purpose.
-- A non-RT-safe syscall or page fault in the hot path breaks determinism; lock memory and avoid dynamic allocation there.
+## Methodology
 
-## Retrieve or verify (do not assume)
+- Optimize and measure worst-case, not mean: cyclictest under representative load reports max latency, which is what determinism means. A good average with a bad tail fails.
+- Align isolation, IRQ affinity, and thread priority together: isolating a core but leaving interrupts or kernel threads on it defeats the isolation.
+- Keep the hot path RT-safe: lock memory (mlockall), avoid dynamic allocation, page faults, and non-deterministic syscalls in the critical section.
+- PREEMPT_RT lowers worst-case preemption latency but does not make a badly-written path deterministic; the code discipline still matters.
 
-- the kernel config (PREEMPT_RT vs stock) and isolable core count on the target.
+## Common traps
 
-## Before this becomes a real skill
+- Reporting mean latency for a real-time claim.
+- A single page fault or malloc in the hot loop injecting a millisecond spike.
 
-- Pair it with a golden that fails or exceeds loop budget without it.
-- Replace each 'retrieve or verify' item with a provenance-carried fact.
-- Owner line-by-line review.
+## Definition of done
+
+- cyclictest max latency under load meets the deadline; hot path is allocation- and fault-free.

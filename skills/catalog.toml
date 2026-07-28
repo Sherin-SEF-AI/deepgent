@@ -220,7 +220,7 @@ id = "ros2-dds-tuning"
 category = "buses-protocols"
 tier = "T1"
 summary = "Cyclone/Fast DDS, discovery, shared memory"
-status = "draft"
+status = "methodology-complete"
 golden = ""
 
 [[skill]]
@@ -228,7 +228,7 @@ id = "mqtt-fleet-telemetry"
 category = "buses-protocols"
 tier = "T2"
 summary = "store-and-forward, backpressure"
-status = "draft"
+status = "methodology-complete"
 golden = ""
 
 [[skill]]
@@ -236,7 +236,7 @@ id = "training-pipelines"
 category = "perception-training"
 tier = "T0"
 summary = "dataloaders, AMP, schedulers, reproducibility"
-status = "draft"
+status = "methodology-complete"
 golden = ""
 
 [[skill]]
@@ -244,7 +244,7 @@ id = "detection-architectures"
 category = "perception-training"
 tier = "T1"
 summary = "YOLO family, DETR, anchor-free tradeoffs"
-status = "draft"
+status = "methodology-complete"
 golden = ""
 
 [[skill]]
@@ -252,7 +252,7 @@ id = "segmentation-depth"
 category = "perception-training"
 tier = "T2"
 summary = "semantic/instance, mono/stereo depth"
-status = "draft"
+status = "methodology-complete"
 golden = ""
 
 [[skill]]
@@ -260,7 +260,7 @@ id = "multi-object-tracking"
 category = "perception-training"
 tier = "T1"
 summary = "ByteTrack/BoT-SORT, ReID, association tuning"
-status = "draft"
+status = "methodology-complete"
 golden = ""
 
 [[skill]]
@@ -268,7 +268,7 @@ id = "bev-occupancy"
 category = "perception-training"
 tier = "T2"
 summary = "LSS/BEVFormer family, multi-cam to BEV"
-status = "draft"
+status = "methodology-complete"
 golden = ""
 
 [[skill]]
@@ -276,7 +276,7 @@ id = "dataset-curation"
 category = "perception-training"
 tier = "T1"
 summary = "dedup, mining, splits, leakage prevention"
-status = "draft"
+status = "methodology-complete"
 golden = ""
 
 [[skill]]
@@ -284,7 +284,7 @@ id = "auto-labeling"
 category = "perception-training"
 tier = "T2"
 summary = "SAM-class, pseudo-labels, QA loops"
-status = "draft"
+status = "methodology-complete"
 golden = ""
 
 [[skill]]
@@ -292,7 +292,7 @@ id = "cv-eval-metrics"
 category = "perception-training"
 tier = "T1"
 summary = "mAP variants, HOTA/MOTA, calibration curves"
-status = "draft"
+status = "methodology-complete"
 golden = ""
 
 [[skill]]
@@ -300,7 +300,7 @@ id = "domain-adaptation"
 category = "perception-training"
 tier = "T2"
 summary = "night, rain, regional traffic distributions"
-status = "draft"
+status = "methodology-complete"
 golden = ""
 
 [[skill]]
@@ -308,7 +308,7 @@ id = "onnx-export-surgery"
 category = "inference-optimization"
 tier = "T0"
 summary = "opsets, dynamic shapes, graph edits"
-status = "draft"
+status = "methodology-complete"
 golden = ""
 
 [[skill]]
@@ -340,7 +340,7 @@ id = "gstreamer-debugging"
 category = "inference-optimization"
 tier = "T1"
 summary = "pad probes, caps negotiation, latency tracing"
-status = "draft"
+status = "methodology-complete"
 golden = ""
 
 [[skill]]
@@ -356,7 +356,7 @@ id = "cuda-kernel-optimization"
 category = "inference-optimization"
 tier = "T2"
 summary = "coalescing, occupancy, streams"
-status = "draft"
+status = "methodology-complete"
 golden = ""
 
 [[skill]]
@@ -364,7 +364,7 @@ id = "edge-inference-serving"
 category = "inference-optimization"
 tier = "T2"
 summary = "batching, multi-stream scheduling"
-status = "draft"
+status = "methodology-complete"
 golden = ""
 
 [[skill]]
@@ -380,7 +380,7 @@ id = "sensor-fusion-estimation"
 category = "robotics-av"
 tier = "T1"
 summary = "EKF/UKF/ESKF, robot_localization"
-status = "draft"
+status = "methodology-complete"
 golden = ""
 
 [[skill]]
@@ -388,7 +388,7 @@ id = "slam-localization"
 category = "robotics-av"
 tier = "T2"
 summary = "LIO-SAM family, map management, drift"
-status = "draft"
+status = "methodology-complete"
 golden = ""
 
 [[skill]]
@@ -396,7 +396,7 @@ id = "planning-control"
 category = "robotics-av"
 tier = "T2"
 summary = "MPC, pure pursuit, Stanley, lateral/longitudinal"
-status = "draft"
+status = "methodology-complete"
 golden = ""
 
 [[skill]]
@@ -412,7 +412,7 @@ id = "calibration-extrinsics"
 category = "robotics-av"
 tier = "T1"
 summary = "cam-lidar, cam-imu, targetless"
-status = "draft"
+status = "methodology-complete"
 golden = ""
 
 [[skill]]
@@ -460,7 +460,7 @@ id = "bootloaders-ota"
 category = "embedded-firmware"
 tier = "T2"
 summary = "A/B updates, rollback, signing"
-status = "draft"
+status = "methodology-complete"
 golden = ""
 
 [[skill]]
@@ -468,7 +468,7 @@ id = "low-power-design"
 category = "embedded-firmware"
 tier = "T2"
 summary = "sleep modes, wake sources, budgets"
-status = "draft"
+status = "methodology-complete"
 golden = ""
 
 [[skill]]
@@ -476,7 +476,7 @@ id = "firmware-debugging"
 category = "embedded-firmware"
 tier = "T2"
 summary = "JTAG/SWD, hard fault analysis, tracing"
-status = "draft"
+status = "methodology-complete"
 golden = ""
 
 [[skill]]
@@ -484,7 +484,7 @@ id = "linux-realtime"
 category = "systems-production"
 tier = "T1"
 summary = "PREEMPT_RT, isolation, affinity, priorities"
-status = "draft"
+status = "methodology-complete"
 golden = ""
 
 [[skill]]
@@ -492,7 +492,7 @@ id = "profiling-nsight"
 category = "systems-production"
 tier = "T1"
 summary = "nsys/ncu timelines, bottleneck attribution"
-status = "draft"
+status = "methodology-complete"
 golden = ""
 
 [[skill]]
@@ -500,7 +500,7 @@ id = "memory-debugging"
 category = "systems-production"
 tier = "T1"
 summary = "ASAN/valgrind on edge, leak hunting"
-status = "draft"
+status = "methodology-complete"
 golden = ""
 
 [[skill]]
@@ -508,7 +508,7 @@ id = "containerization-edge"
 category = "systems-production"
 tier = "T1"
 summary = "GPU passthrough, image size, runtime"
-status = "draft"
+status = "methodology-complete"
 golden = ""
 
 [[skill]]
@@ -516,7 +516,7 @@ id = "fleet-deployment"
 category = "systems-production"
 tier = "T2"
 summary = "OTA, staged rollout, rollback criteria"
-status = "draft"
+status = "methodology-complete"
 golden = ""
 
 [[skill]]
@@ -524,7 +524,7 @@ id = "observability-edge"
 category = "systems-production"
 tier = "T2"
 summary = "metrics, log shipping, crash dumps"
-status = "draft"
+status = "methodology-complete"
 golden = ""
 
 [[skill]]

@@ -1,31 +1,32 @@
 ---
 name: profiling-nsight
-description: nsys/ncu timelines, bottleneck attribution. DRAFT methodology pack, unreviewed, no paired golden.
-tier: T1
-status: draft-unreviewed
+description: nsys/ncu timelines, bottleneck attribution.
+status: methodology-complete
 ---
 
-# profiling-nsight (draft, unreviewed)
+# profiling-nsight
 
-> Status: DRAFT. Not owner-reviewed and has no paired golden, so it does
-> not yet meet the Part A3 skill contract. Methodology only: every
-> device-specific value below is deliberately deferred to retrieval or
-> on-hardware measurement, never asserted from memory (CLAUDE.md s1, s23).
+> Methodology skill: durable engineering practice, not device facts. It
+> asserts no hardware-specific value; where a number depends on your
+> stack or device, it says to measure or retrieve it. Still needs a
+> paired golden and owner review to meet the full Part A3 contract.
 
 Scope: nsys/ncu timelines, bottleneck attribution.
 
-## Methodology and traps
+When to reach for it: Attributing where time goes before optimizing anything.
 
-- Attribute before optimizing: nsys for the timeline (is it GPU-bound?), ncu for the kernel (why?).
-- A gap on the GPU timeline is usually CPU, sync, or copy, not slow kernels; fix the real bottleneck.
-- Profile the steady state, not warm-up; first iterations mislead.
+## Methodology
 
-## Retrieve or verify (do not assume)
+- Use the right tool for the question: nsys for the system timeline (is the workload even GPU-bound? where are the gaps?), ncu for a specific kernel (why is it slow?).
+- A gap on the GPU timeline is usually CPU work, synchronization, or memory copy, not slow kernels; fix the actual dominant cost, not the most visible kernel.
+- Profile steady state, not warm-up; the first iterations include allocation and JIT and mislead.
+- Attribute before optimizing and re-measure after; an optimization that does not move the profiled bottleneck was the wrong one.
 
-- the target GPU arch for ncu metric interpretation.
+## Common traps
 
-## Before this becomes a real skill
+- Optimizing a kernel that is 5% of the timeline while a memcpy or sync is 40%.
+- Reading warm-up iterations as representative.
 
-- Pair it with a golden that fails or exceeds loop budget without it.
-- Replace each 'retrieve or verify' item with a provenance-carried fact.
-- Owner line-by-line review.
+## Definition of done
+
+- The dominant cost is identified from a timeline and addressed; re-profile confirms it moved.

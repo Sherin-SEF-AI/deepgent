@@ -1,32 +1,32 @@
 ---
 name: calibration-extrinsics
-description: cam-lidar, cam-imu, targetless. DRAFT methodology pack, unreviewed, no paired golden.
-tier: T1
-status: draft-unreviewed
+description: cam-lidar, cam-imu, targetless.
+status: methodology-complete
 ---
 
-# calibration-extrinsics (draft, unreviewed)
+# calibration-extrinsics
 
-> Status: DRAFT. Not owner-reviewed and has no paired golden, so it does
-> not yet meet the Part A3 skill contract. Methodology only: every
-> device-specific value below is deliberately deferred to retrieval or
-> on-hardware measurement, never asserted from memory (CLAUDE.md s1, s23).
+> Methodology skill: durable engineering practice, not device facts. It
+> asserts no hardware-specific value; where a number depends on your
+> stack or device, it says to measure or retrieve it. Still needs a
+> paired golden and owner review to meet the full Part A3 contract.
 
 Scope: cam-lidar, cam-imu, targetless.
 
-## Methodology and traps
+When to reach for it: Producing and maintaining the extrinsic transforms fusion depends on.
 
-- Extrinsic error propagates into every fusion product; treat calibration as a measured, versioned artifact, not a one-time step.
-- Targetless methods are convenient but need motion excitation and good time sync; verify against a target-based result once.
-- Re-calibrate after any mechanical change; a bumped sensor invalidates prior extrinsics silently.
+## Methodology
 
-## Retrieve or verify (do not assume)
+- Treat extrinsics as a measured, versioned artifact with an uncertainty, not a one-time constant; error propagates into every fusion product.
+- Targetless methods are convenient but need motion excitation and good time sync; validate a targetless result against a target-based one at least once per rig design.
+- Re-calibrate after any mechanical change; a bumped or re-seated sensor silently invalidates prior extrinsics.
+- Report a validation metric (reprojection error, point-to-plane residual) with each calibration so a bad one is caught before it ships.
 
-- the sensor mounting geometry and the calibration procedure used.
-- a validation metric for the resulting extrinsics.
+## Common traps
 
-## Before this becomes a real skill
+- Reusing extrinsics across physically different units of the 'same' rig.
+- Accepting a targetless calibration with no independent validation.
 
-- Pair it with a golden that fails or exceeds loop budget without it.
-- Replace each 'retrieve or verify' item with a provenance-carried fact.
-- Owner line-by-line review.
+## Definition of done
+
+- Extrinsics versioned with an uncertainty and a validation metric; re-calibration triggered on mechanical change.

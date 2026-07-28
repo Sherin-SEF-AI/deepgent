@@ -1,31 +1,32 @@
 ---
 name: observability-edge
-description: metrics, log shipping, crash dumps. DRAFT methodology pack, unreviewed, no paired golden.
-tier: T2
-status: draft-unreviewed
+description: metrics, log shipping, crash dumps.
+status: methodology-complete
 ---
 
-# observability-edge (draft, unreviewed)
+# observability-edge
 
-> Status: DRAFT. Not owner-reviewed and has no paired golden, so it does
-> not yet meet the Part A3 skill contract. Methodology only: every
-> device-specific value below is deliberately deferred to retrieval or
-> on-hardware measurement, never asserted from memory (CLAUDE.md s1, s23).
+> Methodology skill: durable engineering practice, not device facts. It
+> asserts no hardware-specific value; where a number depends on your
+> stack or device, it says to measure or retrieve it. Still needs a
+> paired golden and owner review to meet the full Part A3 contract.
 
 Scope: metrics, log shipping, crash dumps.
 
-## Methodology and traps
+When to reach for it: Instrumenting fleet devices whose links are intermittent and storage is small.
 
-- Edge links are intermittent; buffer metrics and logs locally with bounded storage and forward opportunistically.
-- Crash dumps are the highest-value signal; capture and ship them before they are overwritten.
-- Cardinality kills edge telemetry cost; choose labels deliberately.
+## Methodology
 
-## Retrieve or verify (do not assume)
+- Buffer metrics and logs locally with bounded storage and forward opportunistically; the same store-and-forward discipline as telemetry applies.
+- Prioritize crash dumps: they are the highest-value signal and are overwritten fast; capture and ship them before rotation.
+- Control cardinality deliberately; high-cardinality labels explode storage and cost on constrained backends.
+- Timestamp at the edge with a disciplined clock so events order correctly after delayed upload.
 
-- the bandwidth/storage budget and the metrics backend contract.
+## Common traps
 
-## Before this becomes a real skill
+- High-cardinality per-device labels that blow up the metrics backend cost.
+- Losing the crash dump to log rotation before it uploads.
 
-- Pair it with a golden that fails or exceeds loop budget without it.
-- Replace each 'retrieve or verify' item with a provenance-carried fact.
-- Owner line-by-line review.
+## Definition of done
+
+- Crash dumps reliably captured and shipped; metric cardinality bounded; buffering survives outages.

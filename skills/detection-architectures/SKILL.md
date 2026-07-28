@@ -1,32 +1,33 @@
 ---
 name: detection-architectures
-description: YOLO family, DETR, anchor-free tradeoffs. DRAFT methodology pack, unreviewed, no paired golden.
-tier: T1
-status: draft-unreviewed
+description: YOLO family, DETR, anchor-free tradeoffs.
+status: methodology-complete
 ---
 
-# detection-architectures (draft, unreviewed)
+# detection-architectures
 
-> Status: DRAFT. Not owner-reviewed and has no paired golden, so it does
-> not yet meet the Part A3 skill contract. Methodology only: every
-> device-specific value below is deliberately deferred to retrieval or
-> on-hardware measurement, never asserted from memory (CLAUDE.md s1, s23).
+> Methodology skill: durable engineering practice, not device facts. It
+> asserts no hardware-specific value; where a number depends on your
+> stack or device, it says to measure or retrieve it. Still needs a
+> paired golden and owner review to meet the full Part A3 contract.
 
 Scope: YOLO family, DETR, anchor-free tradeoffs.
 
-## Methodology and traps
+When to reach for it: Choosing or tuning an object detector for an edge latency/accuracy budget.
 
-- Anchor-based vs anchor-free changes label assignment and NMS behavior; a config tuned for one hurts the other.
-- Report accuracy at the deployment input resolution and precision, not the training-time ideal.
-- DETR-family models converge slowly and are sensitive to augmentation; do not compare to a YOLO on epoch count.
+## Methodology
 
-## Retrieve or verify (do not assume)
+- Pick the family by label-assignment behavior, not benchmark mAP: anchor-based needs anchor tuning to your box-size distribution; anchor-free (center/point) avoids that but is sensitive to scale imbalance; DETR-family removes NMS but converges slowly and wants heavy augmentation.
+- Fix the evaluation input resolution and precision to the deployment target before comparing models; a model that wins at 1280px fp16 can lose at 640px int8.
+- Tune NMS (IoU threshold, score threshold, class-agnostic vs per-class) on the val set; default NMS often costs several points of recall on crowded scenes.
+- For small-object regimes, resolution and feature-pyramid level matter more than backbone size; measure per-size AP (small/medium/large), not just overall.
 
-- the target latency/accuracy envelope on the deployment device.
-- the class set and dataset the model must serve.
+## Common traps
 
-## Before this becomes a real skill
+- Comparing a YOLO to a DETR on epoch count is meaningless; they have different convergence regimes.
+- Reporting training-resolution mAP and deploying at a lower resolution overstates field accuracy.
 
-- Pair it with a golden that fails or exceeds loop budget without it.
-- Replace each 'retrieve or verify' item with a provenance-carried fact.
-- Owner line-by-line review.
+## Definition of done
+
+- Accuracy reported at the exact deployment resolution and precision, broken out by object size.
+- NMS thresholds chosen from a sweep on the val set, not defaults.

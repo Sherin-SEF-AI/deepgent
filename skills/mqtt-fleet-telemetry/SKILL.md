@@ -1,32 +1,32 @@
 ---
 name: mqtt-fleet-telemetry
-description: store-and-forward, backpressure. DRAFT methodology pack, unreviewed, no paired golden.
-tier: T2
-status: draft-unreviewed
+description: store-and-forward, backpressure.
+status: methodology-complete
 ---
 
-# mqtt-fleet-telemetry (draft, unreviewed)
+# mqtt-fleet-telemetry
 
-> Status: DRAFT. Not owner-reviewed and has no paired golden, so it does
-> not yet meet the Part A3 skill contract. Methodology only: every
-> device-specific value below is deliberately deferred to retrieval or
-> on-hardware measurement, never asserted from memory (CLAUDE.md s1, s23).
+> Methodology skill: durable engineering practice, not device facts. It
+> asserts no hardware-specific value; where a number depends on your
+> stack or device, it says to measure or retrieve it. Still needs a
+> paired golden and owner review to meet the full Part A3 contract.
 
 Scope: store-and-forward, backpressure.
 
-## Methodology and traps
+When to reach for it: Shipping telemetry from intermittently-connected edge devices.
 
-- Design store-and-forward for the disconnected case first; edge links drop, and lost telemetry is the default failure.
-- Backpressure must be bounded: an unbounded local queue turns a network outage into a disk-full outage.
-- QoS level and clean-session choice change delivery guarantees and broker load; pick per topic, not globally.
+## Methodology
 
-## Retrieve or verify (do not assume)
+- Design for the disconnected case first: buffer locally with bounded storage and forward opportunistically; lost telemetry on a dropped link is the default failure to prevent.
+- Bound the backpressure: an unbounded local queue turns a network outage into a disk-full outage. Drop or downsample by policy when the buffer fills.
+- Choose QoS per topic (0/1/2) against delivery-guarantee vs broker-load tradeoffs, not globally; clean-session and retained-message choices change reconnect behavior.
+- Batch and compress buffered messages before forwarding to amortize connection cost on expensive links.
 
-- the broker's QoS/retention limits and auth scheme.
-- the per-device bandwidth and storage budget for buffering.
+## Common traps
 
-## Before this becomes a real skill
+- QoS 2 everywhere, overloading the broker for data that tolerates loss.
+- An unbounded offline queue that fills the disk and takes the device down.
 
-- Pair it with a golden that fails or exceeds loop budget without it.
-- Replace each 'retrieve or verify' item with a provenance-carried fact.
-- Owner line-by-line review.
+## Definition of done
+
+- Telemetry survives a simulated multi-hour outage with bounded local storage and a defined drop policy.

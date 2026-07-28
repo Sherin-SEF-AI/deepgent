@@ -1,31 +1,32 @@
 ---
 name: fleet-deployment
-description: OTA, staged rollout, rollback criteria. DRAFT methodology pack, unreviewed, no paired golden.
-tier: T2
-status: draft-unreviewed
+description: OTA, staged rollout, rollback criteria.
+status: methodology-complete
 ---
 
-# fleet-deployment (draft, unreviewed)
+# fleet-deployment
 
-> Status: DRAFT. Not owner-reviewed and has no paired golden, so it does
-> not yet meet the Part A3 skill contract. Methodology only: every
-> device-specific value below is deliberately deferred to retrieval or
-> on-hardware measurement, never asserted from memory (CLAUDE.md s1, s23).
+> Methodology skill: durable engineering practice, not device facts. It
+> asserts no hardware-specific value; where a number depends on your
+> stack or device, it says to measure or retrieve it. Still needs a
+> paired golden and owner review to meet the full Part A3 contract.
 
 Scope: OTA, staged rollout, rollback criteria.
 
-## Methodology and traps
+When to reach for it: Rolling a software or model update across a device fleet safely.
 
-- Stage every rollout (canary, then cohort, then fleet) with explicit rollback criteria defined before the rollout, not during an incident.
-- A rollout needs health signals to gate on; deploying without observability is deploying blind.
-- Version and pin what each cohort runs so a regression is attributable to a specific change.
+## Methodology
 
-## Retrieve or verify (do not assume)
+- Stage every rollout (canary, then cohort, then fleet) with the rollback criteria defined before the rollout starts, not improvised during an incident.
+- Gate each stage on health signals (crash rate, key metric, resource use); deploying without observability to gate on is deploying blind.
+- Version and pin what each cohort runs so a regression is attributable to a specific change and a rollback is exact.
+- Ensure the update mechanism itself has a proven rollback (A/B or equivalent); an OTA path that cannot roll back is a fleet-brick risk.
 
-- the fleet's cohort structure and health metrics.
+## Common traps
 
-## Before this becomes a real skill
+- A 'quick fix' pushed fleet-wide with no canary because it seemed safe.
+- No pre-agreed rollback threshold, so the team argues during the incident.
 
-- Pair it with a golden that fails or exceeds loop budget without it.
-- Replace each 'retrieve or verify' item with a provenance-carried fact.
-- Owner line-by-line review.
+## Definition of done
+
+- Rollout is staged with health gates and a tested rollback; each cohort's exact version is recorded.

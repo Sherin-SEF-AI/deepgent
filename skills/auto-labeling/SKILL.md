@@ -1,32 +1,33 @@
 ---
 name: auto-labeling
-description: SAM-class, pseudo-labels, QA loops. DRAFT methodology pack, unreviewed, no paired golden.
-tier: T2
-status: draft-unreviewed
+description: SAM-class tools, pseudo-labels, QA loops.
+status: methodology-complete
 ---
 
-# auto-labeling (draft, unreviewed)
+# auto-labeling
 
-> Status: DRAFT. Not owner-reviewed and has no paired golden, so it does
-> not yet meet the Part A3 skill contract. Methodology only: every
-> device-specific value below is deliberately deferred to retrieval or
-> on-hardware measurement, never asserted from memory (CLAUDE.md s1, s23).
+> Methodology skill: durable engineering practice, not device facts. It
+> asserts no hardware-specific value; where a number depends on your
+> stack or device, it says to measure or retrieve it. Still needs a
+> paired golden and owner review to meet the full Part A3 contract.
 
-Scope: SAM-class, pseudo-labels, QA loops.
+Scope: SAM-class tools, pseudo-labels, QA loops.
 
-## Methodology and traps
+When to reach for it: Scaling annotation with model assistance while bounding error propagation.
 
-- Pseudo-labels need a QA gate; propagating a model's errors as labels bakes them in permanently.
-- SAM-class tools speed masks but drift on domain-specific classes; sample-audit before trusting a batch.
-- Track label provenance (auto vs human vs corrected) so a bad auto-label batch can be found and reverted.
+## Methodology
 
-## Retrieve or verify (do not assume)
+- Gate every pseudo-label batch with a human-audited sample; propagating a model's systematic errors as labels bakes them in permanently and is hard to unwind.
+- Track label provenance (auto / human / human-corrected) as metadata so a bad auto-batch is findable and revertable.
+- Use confidence and agreement (ensemble or multi-view) to route only uncertain items to humans; spend annotation budget where the model is unsure.
+- Re-audit auto-labels after any domain shift; a labeler model that was fine on day scenes drifts on night scenes.
 
-- the acceptance threshold and audit rate for auto-labels.
-- the class definitions and edge-case rules for the annotator model.
+## Common traps
 
-## Before this becomes a real skill
+- SAM-class mask tools drift on domain-specific or thin classes; a clean-looking mask can be systematically wrong at boundaries.
+- Trusting model confidence as calibrated; auto-label acceptance needs a measured precision at the chosen threshold.
 
-- Pair it with a golden that fails or exceeds loop budget without it.
-- Replace each 'retrieve or verify' item with a provenance-carried fact.
-- Owner line-by-line review.
+## Definition of done
+
+- Measured precision of accepted auto-labels at the acceptance threshold.
+- Provenance recorded per label; a batch can be found and reverted.

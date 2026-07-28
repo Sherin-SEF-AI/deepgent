@@ -1,32 +1,32 @@
 ---
 name: sensor-fusion-estimation
-description: EKF/UKF/ESKF, robot_localization. DRAFT methodology pack, unreviewed, no paired golden.
-tier: T1
-status: draft-unreviewed
+description: EKF/UKF/ESKF, robot_localization.
+status: methodology-complete
 ---
 
-# sensor-fusion-estimation (draft, unreviewed)
+# sensor-fusion-estimation
 
-> Status: DRAFT. Not owner-reviewed and has no paired golden, so it does
-> not yet meet the Part A3 skill contract. Methodology only: every
-> device-specific value below is deliberately deferred to retrieval or
-> on-hardware measurement, never asserted from memory (CLAUDE.md s1, s23).
+> Methodology skill: durable engineering practice, not device facts. It
+> asserts no hardware-specific value; where a number depends on your
+> stack or device, it says to measure or retrieve it. Still needs a
+> paired golden and owner review to meet the full Part A3 contract.
 
 Scope: EKF/UKF/ESKF, robot_localization.
 
-## Methodology and traps
+When to reach for it: Fusing noisy, time-offset sensor streams into a state estimate.
 
-- Filter tuning is process-noise vs measurement-noise; set them from measured sensor characteristics, not by trial and error.
-- Time alignment across sensors dominates fusion quality; a fixed latency offset per sensor is usually needed.
-- An EKF diverges silently under bad initialization or unmodeled nonlinearity; monitor innovation/NIS, not just the estimate.
+## Methodology
 
-## Retrieve or verify (do not assume)
+- Set process and measurement noise from measured sensor characteristics (see the IMU/GNSS characterization), not by trial and error; the filter is only as good as its noise model.
+- Time-align inputs: a fixed per-sensor latency offset is usually required, and unmodeled latency shows as a lagging or oscillating estimate.
+- Monitor filter consistency (innovation / normalized innovation squared); an EKF diverges silently under bad initialization or unmodeled nonlinearity, and NIS reveals it before the estimate looks wrong.
+- Prefer an ESKF for orientation-heavy problems; it keeps the error state small and linearization valid where a direct EKF on a quaternion struggles.
 
-- the per-sensor noise characteristics and timing offsets (measured).
-- the motion model appropriate to the platform.
+## Common traps
 
-## Before this becomes a real skill
+- Tuning noise until the output looks smooth (which just means overconfident/underconfident), rather than to consistency.
+- Ignoring per-sensor time offsets and blaming the model.
 
-- Pair it with a golden that fails or exceeds loop budget without it.
-- Replace each 'retrieve or verify' item with a provenance-carried fact.
-- Owner line-by-line review.
+## Definition of done
+
+- NIS/innovation within expected bounds; noise params traced to measured sensor specs; time offsets applied.

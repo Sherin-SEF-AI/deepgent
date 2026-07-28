@@ -1,32 +1,32 @@
 ---
 name: bev-occupancy
-description: LSS/BEVFormer family, multi-cam to BEV. DRAFT methodology pack, unreviewed, no paired golden.
-tier: T2
-status: draft-unreviewed
+description: LSS/BEVFormer family, multi-cam to BEV.
+status: methodology-complete
 ---
 
-# bev-occupancy (draft, unreviewed)
+# bev-occupancy
 
-> Status: DRAFT. Not owner-reviewed and has no paired golden, so it does
-> not yet meet the Part A3 skill contract. Methodology only: every
-> device-specific value below is deliberately deferred to retrieval or
-> on-hardware measurement, never asserted from memory (CLAUDE.md s1, s23).
+> Methodology skill: durable engineering practice, not device facts. It
+> asserts no hardware-specific value; where a number depends on your
+> stack or device, it says to measure or retrieve it. Still needs a
+> paired golden and owner review to meet the full Part A3 contract.
 
 Scope: LSS/BEVFormer family, multi-cam to BEV.
 
-## Methodology and traps
+When to reach for it: Fusing multiple camera views into a bird's-eye-view or occupancy grid.
 
-- Multi-camera-to-BEV depends on accurate extrinsics; small calibration error smears the BEV grid.
-- LSS-style lifting and transformer-style attention trade compute for accuracy differently; pick for the device budget.
-- Temporal fusion improves occupancy but needs consistent ego-motion; verify pose quality first.
+## Methodology
 
-## Retrieve or verify (do not assume)
+- BEV quality depends on accurate camera intrinsics/extrinsics; small calibration error smears the projected grid, so calibrate before blaming the model.
+- LSS-style depth-lifting and transformer-attention (BEVFormer-style) trade compute for accuracy differently; pick for the device budget and measure both latency and grid accuracy.
+- Temporal fusion across frames improves occupancy but needs consistent ego-motion; verify pose quality before adding temporal terms.
+- Choose grid resolution and range for the task; finer grids cost quadratic compute for diminishing planning benefit.
 
-- the camera rig extrinsics/intrinsics quality.
-- the BEV grid resolution and range the task needs.
+## Common traps
 
-## Before this becomes a real skill
+- Attributing BEV smearing to the network when the real cause is rig calibration.
+- A grid resolution/range chosen for benchmark scores, not the planner's need or the device budget.
 
-- Pair it with a golden that fails or exceeds loop budget without it.
-- Replace each 'retrieve or verify' item with a provenance-carried fact.
-- Owner line-by-line review.
+## Definition of done
+
+- BEV accuracy measured against the calibrated rig; latency and grid config matched to device and planner needs.

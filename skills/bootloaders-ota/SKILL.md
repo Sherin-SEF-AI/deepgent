@@ -1,31 +1,32 @@
 ---
 name: bootloaders-ota
-description: A/B updates, rollback, signing. DRAFT methodology pack, unreviewed, no paired golden.
-tier: T2
-status: draft-unreviewed
+description: A/B updates, rollback, signing.
+status: methodology-complete
 ---
 
-# bootloaders-ota (draft, unreviewed)
+# bootloaders-ota
 
-> Status: DRAFT. Not owner-reviewed and has no paired golden, so it does
-> not yet meet the Part A3 skill contract. Methodology only: every
-> device-specific value below is deliberately deferred to retrieval or
-> on-hardware measurement, never asserted from memory (CLAUDE.md s1, s23).
+> Methodology skill: durable engineering practice, not device facts. It
+> asserts no hardware-specific value; where a number depends on your
+> stack or device, it says to measure or retrieve it. Still needs a
+> paired golden and owner review to meet the full Part A3 contract.
 
 Scope: A/B updates, rollback, signing.
 
-## Methodology and traps
+When to reach for it: Designing a field-update path that cannot brick a device.
 
-- A/B with rollback is the baseline; an update path without a proven rollback is a field-brick risk.
-- Sign and verify images; an unauthenticated OTA is a remote-code-execution path.
-- Power-fail during update must leave a bootable slot; test the update across a forced power cut.
+## Methodology
 
-## Retrieve or verify (do not assume)
+- A/B (or equivalent) with a proven rollback is the baseline; an update path without a tested rollback is a field-brick risk regardless of how careful the update is.
+- Sign images and verify on the device before boot; an unauthenticated OTA is a remote-code-execution path.
+- Make the update power-fail safe: a forced power cut mid-update must leave a bootable slot. Test exactly that.
+- Gate the slot switch on a post-update health check (watchdog-confirmed boot) so a bad image auto-reverts.
 
-- the bootloader's slot layout, signing scheme, and rollback trigger.
+## Common traps
 
-## Before this becomes a real skill
+- Testing the happy path only and never a power cut during flash.
+- Switching the active slot before confirming the new image actually boots and passes health.
 
-- Pair it with a golden that fails or exceeds loop budget without it.
-- Replace each 'retrieve or verify' item with a provenance-carried fact.
-- Owner line-by-line review.
+## Definition of done
+
+- Update survives a mid-flash power cut with a bootable fallback; images signed/verified; auto-revert on failed health.

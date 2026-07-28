@@ -1,31 +1,32 @@
 ---
 name: domain-adaptation
-description: night, rain, regional traffic distributions. DRAFT methodology pack, unreviewed, no paired golden.
-tier: T2
-status: draft-unreviewed
+description: night, rain, regional distribution shift.
+status: methodology-complete
 ---
 
-# domain-adaptation (draft, unreviewed)
+# domain-adaptation
 
-> Status: DRAFT. Not owner-reviewed and has no paired golden, so it does
-> not yet meet the Part A3 skill contract. Methodology only: every
-> device-specific value below is deliberately deferred to retrieval or
-> on-hardware measurement, never asserted from memory (CLAUDE.md s1, s23).
+> Methodology skill: durable engineering practice, not device facts. It
+> asserts no hardware-specific value; where a number depends on your
+> stack or device, it says to measure or retrieve it. Still needs a
+> paired golden and owner review to meet the full Part A3 contract.
 
-Scope: night, rain, regional traffic distributions.
+Scope: night, rain, regional distribution shift.
 
-## Methodology and traps
+When to reach for it: A model that works in one domain must hold up in another.
 
-- Quantify the domain gap before adapting: measure the target-domain metric first, or you cannot show improvement.
-- Night/rain/region shifts need matched evaluation sets; adapting without a target-domain val set is guessing.
-- Synthetic or augmented data helps but introduces its own gap; validate on real target data.
+## Methodology
 
-## Retrieve or verify (do not assume)
+- Quantify the gap first: measure the target-domain metric on the source model before adapting, or you cannot demonstrate improvement.
+- Build a matched target-domain evaluation set (even small, even proxy-labeled); adapting without a target val set is guessing.
+- Prefer the cheapest lever that closes the gap: targeted data collection and augmentation before adversarial or self-training methods, which add instability.
+- Watch for negative transfer: adaptation that helps the target can regress the source; report both.
 
-- a labeled or proxy evaluation set for the target domain.
+## Common traps
 
-## Before this becomes a real skill
+- Synthetic or heavily augmented target data introduces its own gap; validate on real target data.
+- Improving an unlabeled target proxy metric that does not correlate with the real objective.
 
-- Pair it with a golden that fails or exceeds loop budget without it.
-- Replace each 'retrieve or verify' item with a provenance-carried fact.
-- Owner line-by-line review.
+## Definition of done
+
+- Target-domain metric measured before and after; source-domain regression checked.

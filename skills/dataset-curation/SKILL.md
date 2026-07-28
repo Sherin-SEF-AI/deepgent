@@ -1,32 +1,33 @@
 ---
 name: dataset-curation
-description: dedup, mining, splits, leakage prevention. DRAFT methodology pack, unreviewed, no paired golden.
-tier: T1
-status: draft-unreviewed
+description: dedup, mining, splits, leakage prevention.
+status: methodology-complete
 ---
 
-# dataset-curation (draft, unreviewed)
+# dataset-curation
 
-> Status: DRAFT. Not owner-reviewed and has no paired golden, so it does
-> not yet meet the Part A3 skill contract. Methodology only: every
-> device-specific value below is deliberately deferred to retrieval or
-> on-hardware measurement, never asserted from memory (CLAUDE.md s1, s23).
+> Methodology skill: durable engineering practice, not device facts. It
+> asserts no hardware-specific value; where a number depends on your
+> stack or device, it says to measure or retrieve it. Still needs a
+> paired golden and owner review to meet the full Part A3 contract.
 
 Scope: dedup, mining, splits, leakage prevention.
 
-## Methodology and traps
+When to reach for it: Building or auditing a dataset whose splits must not leak.
 
-- Prevent leakage first: split by scene/sequence/vehicle, never by random frame, or val leaks into train.
-- Dedup near-duplicates before splitting; identical frames across splits inflate metrics.
-- Mine for rare cases deliberately; a dataset balanced by frame count is imbalanced by scenario.
+## Methodology
 
-## Retrieve or verify (do not assume)
+- Split by the highest-correlation unit, not by frame: by scene, drive, or vehicle. Random per-frame splits leak near-identical neighbors from train into val and inflate every metric.
+- Deduplicate near-duplicates (perceptual hash or embedding distance) before splitting; identical frames across splits are silent leakage.
+- Mine for rare scenarios deliberately (hard-example mining, class-balanced sampling by scenario not by frame count); a frame-balanced dataset is scenario-imbalanced.
+- Version the dataset and record the split keys and hashes in the manifest so a metric is attributable to a specific data state.
 
-- the correct split key (scene/drive/vehicle) for this dataset.
-- the rare-scenario definitions the task cares about.
+## Common traps
 
-## Before this becomes a real skill
+- Augmenting before splitting leaks an image's augmentations across splits.
+- Balancing by class-frame-count still leaves rare-scenario classes underrepresented in the situations that matter.
 
-- Pair it with a golden that fails or exceeds loop budget without it.
-- Replace each 'retrieve or verify' item with a provenance-carried fact.
-- Owner line-by-line review.
+## Definition of done
+
+- Splits keyed by scene/drive/vehicle with no shared near-duplicates (verified by dedup pass).
+- Rare-scenario coverage measured, not assumed from class counts.

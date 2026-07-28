@@ -1,32 +1,32 @@
 ---
 name: slam-localization
-description: LIO-SAM family, map management, drift. DRAFT methodology pack, unreviewed, no paired golden.
-tier: T2
-status: draft-unreviewed
+description: LIO-SAM family, map management, drift.
+status: methodology-complete
 ---
 
-# slam-localization (draft, unreviewed)
+# slam-localization
 
-> Status: DRAFT. Not owner-reviewed and has no paired golden, so it does
-> not yet meet the Part A3 skill contract. Methodology only: every
-> device-specific value below is deliberately deferred to retrieval or
-> on-hardware measurement, never asserted from memory (CLAUDE.md s1, s23).
+> Methodology skill: durable engineering practice, not device facts. It
+> asserts no hardware-specific value; where a number depends on your
+> stack or device, it says to measure or retrieve it. Still needs a
+> paired golden and owner review to meet the full Part A3 contract.
 
 Scope: LIO-SAM family, map management, drift.
 
-## Methodology and traps
+When to reach for it: Building or localizing against a map where drift and loop closure govern quality.
 
-- Drift is inevitable; the design question is loop closure and map management, not eliminating drift.
-- LIO-family accuracy depends on IMU quality and extrinsic calibration; garbage extrinsics defeat a good algorithm.
-- Evaluate on a trajectory with ground truth or loop closure, not by eyeballing a point cloud.
+## Methodology
 
-## Retrieve or verify (do not assume)
+- Drift is inevitable in odometry; the design question is loop closure and map management, not eliminating drift. Budget for it.
+- LIO-family accuracy is bounded by IMU quality and lidar-IMU extrinsic calibration; bad extrinsics defeat a good algorithm, so calibrate first.
+- Evaluate on a trajectory with ground truth or a loop-closure constraint, not by eyeballing a point cloud; a visually crisp map can still drift metrically.
+- Manage map growth (voxel downsampling, keyframe selection, submaps) so long runs stay bounded in memory and compute.
 
-- the lidar-IMU extrinsics and IMU noise model.
-- a ground-truth or loop-closure reference for evaluation.
+## Common traps
 
-## Before this becomes a real skill
+- Judging SLAM by point-cloud sharpness rather than trajectory error.
+- Unbounded map growth that degrades a long mission mid-run.
 
-- Pair it with a golden that fails or exceeds loop budget without it.
-- Replace each 'retrieve or verify' item with a provenance-carried fact.
-- Owner line-by-line review.
+## Definition of done
+
+- Trajectory error measured against ground truth or loop closure; map memory bounded over a long run.

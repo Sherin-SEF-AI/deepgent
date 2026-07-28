@@ -1,32 +1,34 @@
 ---
 name: onnx-export-surgery
-description: opsets, dynamic shapes, graph edits. DRAFT methodology pack, unreviewed, no paired golden.
-tier: T0
-status: draft-unreviewed
+description: opsets, dynamic shapes, graph edits.
+status: methodology-complete
 ---
 
-# onnx-export-surgery (draft, unreviewed)
+# onnx-export-surgery
 
-> Status: DRAFT. Not owner-reviewed and has no paired golden, so it does
-> not yet meet the Part A3 skill contract. Methodology only: every
-> device-specific value below is deliberately deferred to retrieval or
-> on-hardware measurement, never asserted from memory (CLAUDE.md s1, s23).
+> Methodology skill: durable engineering practice, not device facts. It
+> asserts no hardware-specific value; where a number depends on your
+> stack or device, it says to measure or retrieve it. Still needs a
+> paired golden and owner review to meet the full Part A3 contract.
 
 Scope: opsets, dynamic shapes, graph edits.
 
-## Methodology and traps
+When to reach for it: Exporting a trained model to a runtime and fixing graph-level export issues.
 
-- Pin the opset to what the target runtime supports; a newer opset exports cleanly and fails at load.
-- Dynamic shapes must be declared at export, not patched later; a static-shape export cannot be made dynamic downstream.
-- Verify numerics after any graph edit with a reference input; a folded or fused graph can silently change outputs.
-- Strip training-only nodes (dropout, aux heads) before export to avoid runtime surprises.
+## Methodology
 
-## Retrieve or verify (do not assume)
+- Pin the opset to what the target runtime supports (check the runtime's op/opset matrix); a newer opset exports cleanly and fails at load or falls back to slow paths.
+- Declare dynamic axes at export time; you cannot make a static-shape ONNX dynamic afterward without re-export.
+- After any graph edit (constant folding, node fusion, shape inference, opset conversion), verify numerics against a reference input with a tight tolerance; folds can silently change outputs.
+- Strip training-only subgraphs (dropout, aux heads, loss) before export; they bloat the graph and can trip the runtime.
+- Simplify with a graph optimizer, but re-verify after; aggressive fusion occasionally changes semantics for custom ops.
 
-- the opset and operator support of the target runtime/TensorRT version (from versions.toml / runtime docs).
+## Common traps
 
-## Before this becomes a real skill
+- Exporting with a batch dimension hardcoded when the deployment batches dynamically.
+- Assuming an op exists in the target runtime because it exists in the framework; check the support matrix.
 
-- Pair it with a golden that fails or exceeds loop budget without it.
-- Replace each 'retrieve or verify' item with a provenance-carried fact.
-- Owner line-by-line review.
+## Definition of done
+
+- Exported model loads on the target runtime at the pinned opset and matches the reference output within tolerance.
+- Dynamic axes declared to match deployment batching/resolution.

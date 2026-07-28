@@ -1,31 +1,32 @@
 ---
 name: firmware-debugging
-description: JTAG/SWD, hard fault analysis, tracing. DRAFT methodology pack, unreviewed, no paired golden.
-tier: T2
-status: draft-unreviewed
+description: JTAG/SWD, hard fault analysis, tracing.
+status: methodology-complete
 ---
 
-# firmware-debugging (draft, unreviewed)
+# firmware-debugging
 
-> Status: DRAFT. Not owner-reviewed and has no paired golden, so it does
-> not yet meet the Part A3 skill contract. Methodology only: every
-> device-specific value below is deliberately deferred to retrieval or
-> on-hardware measurement, never asserted from memory (CLAUDE.md s1, s23).
+> Methodology skill: durable engineering practice, not device facts. It
+> asserts no hardware-specific value; where a number depends on your
+> stack or device, it says to measure or retrieve it. Still needs a
+> paired golden and owner review to meet the full Part A3 contract.
 
 Scope: JTAG/SWD, hard fault analysis, tracing.
 
-## Methodology and traps
+When to reach for it: Diagnosing crashes and faults in bare-metal or RTOS firmware.
 
-- A hard fault has a recoverable trail: capture the stacked registers and fault status before resetting.
-- JTAG/SWD lets you halt and inspect; a printf-only workflow misses timing and fault state.
-- Reproduce with a minimal case; an intermittent fault under the full app is often a stack, DMA, or interrupt-priority bug.
+## Methodology
 
-## Retrieve or verify (do not assume)
+- A hard fault leaves a recoverable trail: capture the stacked registers and the fault-status registers before resetting; they usually point straight at the faulting access.
+- Use JTAG/SWD to halt and inspect state (and set data watchpoints); a printf-only workflow misses timing-dependent and fault-state bugs.
+- Reproduce with a minimal case; an intermittent fault under the full app is often a stack overflow, DMA-buffer, or interrupt-priority bug that a minimal reproducer isolates.
+- Add instruction/data trace (where the core supports it) for bugs that vanish under a debugger's timing.
 
-- the core's fault-status registers and debug interface (from the reference manual).
+## Common traps
 
-## Before this becomes a real skill
+- Resetting on fault before reading the fault registers, discarding the evidence.
+- Heisenbugs that disappear when single-stepping because they are timing/race bugs; use trace, not stepping.
 
-- Pair it with a golden that fails or exceeds loop budget without it.
-- Replace each 'retrieve or verify' item with a provenance-carried fact.
-- Owner line-by-line review.
+## Definition of done
+
+- Fault root-caused from captured registers/trace on a minimal reproducer, not guessed.

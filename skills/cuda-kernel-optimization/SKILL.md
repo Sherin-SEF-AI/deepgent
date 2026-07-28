@@ -1,32 +1,34 @@
 ---
 name: cuda-kernel-optimization
-description: coalescing, occupancy, streams. DRAFT methodology pack, unreviewed, no paired golden.
-tier: T2
-status: draft-unreviewed
+description: coalescing, occupancy, streams.
+status: methodology-complete
 ---
 
-# cuda-kernel-optimization (draft, unreviewed)
+# cuda-kernel-optimization
 
-> Status: DRAFT. Not owner-reviewed and has no paired golden, so it does
-> not yet meet the Part A3 skill contract. Methodology only: every
-> device-specific value below is deliberately deferred to retrieval or
-> on-hardware measurement, never asserted from memory (CLAUDE.md s1, s23).
+> Methodology skill: durable engineering practice, not device facts. It
+> asserts no hardware-specific value; where a number depends on your
+> stack or device, it says to measure or retrieve it. Still needs a
+> paired golden and owner review to meet the full Part A3 contract.
 
 Scope: coalescing, occupancy, streams.
 
-## Methodology and traps
+When to reach for it: A CUDA kernel is the bottleneck and needs to be faster without becoming wrong.
 
-- Profile before optimizing: nsight tells you if the kernel is memory-bound or compute-bound, and the fix differs entirely.
-- Coalesced global-memory access and occupancy usually beat clever arithmetic; check the memory pattern first.
-- Overlap copy and compute with streams only after the kernel itself is efficient; premature streaming hides nothing.
-- Verify correctness against a reference after every optimization; fast and wrong is worse than slow and right.
+## Methodology
 
-## Retrieve or verify (do not assume)
+- Profile before touching code: determine memory-bound vs compute-bound (from an ncu report). The fix is entirely different, and optimizing the wrong axis wastes effort.
+- For memory-bound kernels, fix the access pattern first: coalesce global loads/stores, use shared memory for reuse, and align to the transaction size. This usually beats arithmetic cleverness.
+- Raise occupancy only until latency is hidden, not maximally; past that, register/shared pressure hurts. Use the occupancy calculator as a guide, then measure.
+- Overlap host-device copy with compute using streams and pinned memory only after the kernel itself is efficient; streaming a slow kernel hides nothing.
+- Verify correctness against a CPU reference after every change; deepgent's cuda-check (compute-sanitizer) should be clean of races and memory errors.
 
-- the target GPU's compute capability and resource limits (from nvidia-smi / the arch spec).
+## Common traps
 
-## Before this becomes a real skill
+- Chasing occupancy to 100% and slowing down due to register spills.
+- Bank conflicts in shared memory silently serialize access; pad to avoid them.
 
-- Pair it with a golden that fails or exceeds loop budget without it.
-- Replace each 'retrieve or verify' item with a provenance-carried fact.
-- Owner line-by-line review.
+## Definition of done
+
+- ncu shows the kernel is bound by the intended resource and near roofline for it.
+- compute-sanitizer clean; output matches the reference within tolerance.
