@@ -100,7 +100,7 @@ id = "camera-bringup-fpdlink"
 category = "camera-bringup"
 tier = "T2"
 summary = "FPD-Link camera bring-up"
-status = "draft"
+status = "fact-verified"
 golden = ""
 
 [[skill]]
@@ -148,7 +148,7 @@ id = "radar-integration"
 category = "other-sensors"
 tier = "T2"
 summary = "mmWave config, CAN/Ethernet radar"
-status = "draft"
+status = "fact-verified"
 golden = ""
 
 [[skill]]
@@ -156,7 +156,7 @@ id = "imu-integration"
 category = "other-sensors"
 tier = "T1"
 summary = "Allan variance, bias, thermal drift"
-status = "draft"
+status = "fact-verified"
 golden = ""
 
 [[skill]]
@@ -164,7 +164,7 @@ id = "gnss-rtk"
 category = "other-sensors"
 tier = "T2"
 summary = "NTRIP, fix quality, UBX/NMEA"
-status = "draft"
+status = "fact-verified"
 golden = ""
 
 [[skill]]
@@ -188,7 +188,7 @@ id = "can-bus"
 category = "buses-protocols"
 tier = "T0"
 summary = "SocketCAN, CAN-FD, sample point, bus-off recovery"
-status = "draft"
+status = "fact-verified"
 golden = ""
 
 [[skill]]
@@ -444,7 +444,7 @@ id = "esp-idf"
 category = "embedded-firmware"
 tier = "T2"
 summary = "partitions, WiFi/BLE, OTA"
-status = "draft"
+status = "fact-verified"
 golden = ""
 
 [[skill]]
@@ -452,7 +452,7 @@ id = "stm32-baremetal"
 category = "embedded-firmware"
 tier = "T2"
 summary = "HAL vs LL, DMA, clock tree"
-status = "draft"
+status = "fact-verified"
 golden = ""
 
 [[skill]]

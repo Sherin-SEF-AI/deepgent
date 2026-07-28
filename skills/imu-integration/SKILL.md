@@ -1,32 +1,36 @@
 ---
 name: imu-integration
-description: Allan variance, bias, thermal drift. DRAFT methodology pack, unreviewed, no paired golden.
-tier: T1
-status: draft-unreviewed
+description: Allan variance, bias, thermal drift.
+applies_to: ST LSM6DSR 6-axis IMU
+status: fact-verified
 ---
 
-# imu-integration (draft, unreviewed)
+# imu-integration
 
-> Status: DRAFT. Not owner-reviewed and has no paired golden, so it does
-> not yet meet the Part A3 skill contract. Methodology only: every
-> device-specific value below is deliberately deferred to retrieval or
-> on-hardware measurement, never asserted from memory (CLAUDE.md s1, s23).
+> Fact-verified: the facts below were retrieved from public datasheets
+> ingested into the knowledge corpus and each cites its source document
+> and section. No value is asserted from memory. Board-specific wiring and
+> full register maps still require the complete datasheet or on-hardware
+> verification. Needs a paired golden and owner review for full Part A3.
 
 Scope: Allan variance, bias, thermal drift.
 
-## Methodology and traps
+When to reach for it: Integrating and characterizing a 6-axis IMU for fusion.
 
-- Characterize noise with an Allan-variance plot from a long static log; use it to set process-noise, do not guess.
-- Bias drifts with temperature; log temperature and model bias-vs-temp rather than calibrating once at room temp.
-- Axis convention and units differ per device; verify sign and frame with a known rotation before fusion.
+## Methodology
 
-## Retrieve or verify (do not assume)
+- Characterize noise from a long static log with an Allan-variance plot and set the filter's process noise from it, rather than guessing.
+- Log temperature and model bias-vs-temperature; the zero-rate/zero-g level drifts and a single room-temperature calibration is insufficient.
+- Verify axis sign and frame with a known rotation before feeding the estimator.
 
-- the IMU's noise-density and bias-stability specs (datasheet, confirmed by Allan variance).
-- the device axis convention and full-scale ranges.
+## Verified facts (with provenance)
 
-## Before this becomes a real skill
+- Accelerometer full-scale ranges are plus/minus 2, 4, 8, and 16 g; gyroscope full-scale ranges are plus/minus 125, 250, 500, 1000, 2000, and 4000 dps (LSM6DSR datasheet, s4.1 Table 2).
+- Both accelerometer and gyroscope output data rates are selectable from 12.5 Hz up to 6667 Hz (LSM6DSR datasheet, page 10 characteristics table).
+- Zero-g level and zero-rate level describe the deviation of the actual output from the ideal at rest, and are the per-device offsets that must be calibrated and tracked over temperature (LSM6DSR datasheet, s4.6.2).
+- The device provides a smart FIFO (up to 9 kbytes) and an auxiliary SPI for OIS gyroscope output (LSM6DSR datasheet, features summary).
 
-- Pair it with a golden that fails or exceeds loop budget without it.
-- Replace each 'retrieve or verify' item with a provenance-carried fact.
-- Owner line-by-line review.
+## Retrieve or verify (still needed)
+
+- the noise-density and bias-stability values for your unit (datasheet typicals, confirmed by your Allan-variance measurement).
+- the register-level ODR/full-scale configuration (CTRL registers) for your rate.

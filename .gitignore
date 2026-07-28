@@ -22,3 +22,8 @@ build/
 
 # synced skill packs (generated from skills/ at context assembly)
 .claude/skills/
+
+# Datasheet PDFs for RAG ingest: vendor-copyrighted, never committed. The
+# knowledge corpus is server-side (CLAUDE.md section 19). Folder + README tracked.
+datasheets/*
+!datasheets/README.md

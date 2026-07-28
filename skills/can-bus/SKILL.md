@@ -1,33 +1,36 @@
 ---
 name: can-bus
-description: SocketCAN, CAN-FD, sample point, bus-off recovery. DRAFT methodology pack, unreviewed, no paired golden.
-tier: T0
-status: draft-unreviewed
+description: SocketCAN, CAN-FD, sample point, bus-off recovery.
+applies_to: TI TCAN4550 controller+transceiver / TCAN1042, NXP TJA1051 transceivers
+status: fact-verified
 ---
 
-# can-bus (draft, unreviewed)
+# can-bus
 
-> Status: DRAFT. Not owner-reviewed and has no paired golden, so it does
-> not yet meet the Part A3 skill contract. Methodology only: every
-> device-specific value below is deliberately deferred to retrieval or
-> on-hardware measurement, never asserted from memory (CLAUDE.md s1, s23).
+> Fact-verified: the facts below were retrieved from public datasheets
+> ingested into the knowledge corpus and each cites its source document
+> and section. No value is asserted from memory. Board-specific wiring and
+> full register maps still require the complete datasheet or on-hardware
+> verification. Needs a paired golden and owner review for full Part A3.
 
 Scope: SocketCAN, CAN-FD, sample point, bus-off recovery.
 
-## Methodology and traps
+When to reach for it: Bringing up a CAN or CAN-FD node and designing its error/low-power behavior.
 
-- Set the sample point deliberately, not by default; the wrong sample point causes intermittent errors that look like wiring faults.
-- CAN-FD bit-rate switching needs both nodes configured identically; a mismatch shows as bursts of error frames.
+## Methodology
+
+- Set the sample point deliberately per the network; the wrong sample point causes intermittent errors that look like wiring faults.
+- Terminate with 120 ohm at both physical bus ends only; extra or missing termination degrades signal integrity.
 - Design bus-off recovery explicitly: a node that goes bus-off and never recovers is a silent single point of failure.
-- Termination is 120 ohm at both physical ends only; extra or missing termination degrades signal integrity subtly.
 
-## Retrieve or verify (do not assume)
+## Verified facts (with provenance)
 
-- the bus nominal/data bitrate and required sample point for this network.
-- the DBC / message layout for the devices on the bus.
+- Bus-off recovery follows ISO 11898-1:2015 and cannot be shortened by setting or resetting CCCR.INIT; on bus-off the controller sets CCCR.INIT itself and halts bus activity until the recovery sequence completes (TCAN4550 datasheet, page 86).
+- To support CAN-FD at 2 and 5 Mbps the clock/crystal needs 0.5 percent frequency accuracy; a minimum of 20 MHz is required for 2 Mbps and 40 MHz is recommended (TCAN4550 datasheet, s9.1.1).
+- Low-power standby is entered by driving the STB pin high; the transmitter and normal receiver are disabled and the bus is biased to ground to minimize supply current, leaving only the low-power receiver monitoring the bus (TCAN1042 datasheet, s9.4.3).
+- Transceiver variants differ in bus-fault voltage rating (for example plus/minus 58 V base vs plus/minus 70 V H variants) and in whether they support remote wake (TCAN1042 datasheet, pin/mode selection table).
 
-## Before this becomes a real skill
+## Retrieve or verify (still needed)
 
-- Pair it with a golden that fails or exceeds loop budget without it.
-- Replace each 'retrieve or verify' item with a provenance-carried fact.
-- Owner line-by-line review.
+- your network's nominal and data bitrate and the required sample point.
+- your vehicle/device DBC message layout (owner-supplied; no public doc).
