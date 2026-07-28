@@ -57,6 +57,12 @@ from deepgent.knowledge.skill_author import (
     cluster_tuples,
     draft_skill_candidates,
 )
+from deepgent.knowledge.skill_gate import (
+    SkillIssue,
+    blocking,
+    render_report,
+    validate_skills,
+)
 from deepgent.knowledge.skill_lifecycle import (
     AblationRecord,
     LifecycleReport,
@@ -95,6 +101,7 @@ __all__ = [
     "RagClient",
     "Rail",
     "SkillCandidate",
+    "SkillIssue",
     "SkillMetric",
     "SkillPack",
     "TriageResult",
@@ -106,6 +113,7 @@ __all__ = [
     "arbitrate",
     "arbitrate_all",
     "assemble_premortem",
+    "blocking",
     "bom_advise",
     "build_knowledge_server",
     "build_knowledge_tools",
@@ -125,8 +133,10 @@ __all__ = [
     "next_to_verify",
     "premortem",
     "query",
+    "render_report",
     "scan_errata",
     "sync_skills",
     "triage",
     "upgrade_check",
+    "validate_skills",
 ]

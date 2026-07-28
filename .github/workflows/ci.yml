@@ -35,3 +35,6 @@ jobs:
         run: uv run pytest -m "not hardware"
         env:
           QT_QPA_PLATFORM: offscreen
+
+      - name: Skill/golden contract gate
+        run: uv run deepgent skills validate

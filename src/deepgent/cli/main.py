@@ -1362,7 +1362,46 @@ def skills_list(
         )
         return
     for pack in packs:
-        typer.echo(f"{pack.name}  {pack.description}")
+        tier = f"[{pack.tier}] " if pack.tier else ""
+        typer.echo(f"{tier}{pack.name}  ({pack.status})  {pack.description}")
+
+
+@skills_app.command("status")
+def skills_status(
+    debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
+) -> None:
+    """Summarize skill packs by contract status (draft / methodology-complete /
+    fact-verified / done)."""
+    from collections import Counter
+
+    try:
+        packs = list_skills()
+    except DeepgentError as exc:
+        _fail(str(exc), debug=debug, exc=exc)
+        return
+    counts = Counter(p.status for p in packs)
+    typer.echo(f"{len(packs)} skill packs")
+    for status, n in sorted(counts.items()):
+        typer.echo(f"  {status}: {n}")
+
+
+@skills_app.command("validate")
+def skills_validate(
+    debug: bool = typer.Option(False, "--debug", help="Show raw tracebacks."),
+) -> None:
+    """Enforce the skill/golden contract (Part A3). A skill marked 'done' must
+    name an existing paired golden; a declared golden must resolve. Exits 1 on
+    any blocking finding (this is the CI gate)."""
+    from deepgent.knowledge import blocking, render_report, validate_skills
+
+    try:
+        issues = validate_skills()
+    except DeepgentError as exc:
+        _fail(str(exc), debug=debug, exc=exc)
+        return
+    typer.echo(render_report(issues))
+    if blocking(issues):
+        raise typer.Exit(code=1)
 
 
 def _corpus_tuples_from_telemetry(approved_only: bool) -> list[dict[str, Any]]:

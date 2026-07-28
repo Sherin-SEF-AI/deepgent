@@ -28,11 +28,16 @@ _FRONTMATTER = re.compile(r"\A---\s*\n(.*?)\n---\s*\n", re.DOTALL)
 
 @dataclass(frozen=True)
 class SkillPack:
-    """One local skill pack."""
+    """One local skill pack and its Part A3 contract metadata."""
 
     name: str
     description: str
     path: Path
+    # Contract metadata (expansion spec A3), all optional in frontmatter:
+    status: str = "unknown"  # draft|methodology-complete|fact-verified|done|...
+    tier: str | None = None  # T0..T3
+    applies_to: str | None = None  # version/hardware applicability
+    golden: str | None = None  # paired golden id (required once status is done)
 
 
 def default_skills_dir() -> Path | None:
@@ -57,7 +62,18 @@ def _parse_skill(skill_md: Path) -> SkillPack:
     description = meta.get("description")
     if not name or not description:
         raise ConfigError(f"{skill_md} frontmatter must set both name and description")
-    return SkillPack(name=str(name), description=str(description), path=skill_md.parent)
+    golden = meta.get("golden")
+    tier = meta.get("tier")
+    applies_to = meta.get("applies_to")
+    return SkillPack(
+        name=str(name),
+        description=str(description),
+        path=skill_md.parent,
+        status=str(meta.get("status", "unknown")),
+        tier=str(tier) if tier else None,
+        applies_to=str(applies_to) if applies_to else None,
+        golden=str(golden) if golden else None,
+    )
 
 
 def list_skills(skills_dir: Path | None = None) -> list[SkillPack]:
