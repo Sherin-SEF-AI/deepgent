@@ -1,0 +1,20 @@
+{
+  "gt-0002": {
+    "metrics": {
+      "build_ok": 1.0,
+      "cpu_max_pct": 18.487394957983195,
+      "cpu_mean_pct": 9.744412275139021,
+      "energy_j": 204.025,
+      "gr3d_max_pct": 3.0,
+      "gr3d_mean_pct": 1.0,
+      "kernel_ok": 1.0,
+      "power_max_w": 55.85,
+      "power_mean_w": 40.805,
+      "ram_used_max_mb": 12464.0,
+      "run_exit_code": 0.0,
+      "samples": 10.0,
+      "wall_s": 5.857554733011057
+    },
+    "passed": true
+  }
+}
