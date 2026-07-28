@@ -1,0 +1,541 @@
+# Skill catalog (expansion spec A3). THE MAP, NOT LOADABLE CONTENT.
+#
+# This manifest is data, not a skill pack: it has no SKILL.md, so the harness
+# never loads it into agent context. It records every catalog entry with its
+# tier and the paired golden it must have before it can merge (WO-16 gate).
+#
+# status: 'present' = a SKILL.md pack of that exact id exists on disk;
+#         'planned' = not authored. golden = '' means no paired golden yet, so
+# the entry is NOT yet mergeable under the Part A3 contract (no golden, no
+# merge). Authoring is one skill per session, T0 first, each with its golden
+# and owner review. Never fabricate a hardware fact: carry provenance or mark
+# it unverified (CLAUDE.md section 1).
+
+[meta]
+total = 65
+tier_counts = { T0 = 11, T1 = 24, T2 = 25, T3 = 5 }
+
+[[skill]]
+id = "jetson-bringup"
+category = "jetson-platform"
+tier = "T0"
+summary = "AGX Orin bring-up on JetPack 6.x / L4T r36.x"
+status = "present"
+golden = ""
+
+[[skill]]
+id = "jetson-power-thermal"
+category = "jetson-platform"
+tier = "T0"
+summary = "nvpmodel, jetson_clocks, DVFS, thermal zones"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "jetson-device-tree"
+category = "jetson-platform"
+tier = "T1"
+summary = "pinmux, overlays, dtb build and flash"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "jetson-boot-flashing"
+category = "jetson-platform"
+tier = "T1"
+summary = "initrd flash, UEFI, A/B rootfs, massflash"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "jetson-multimedia-api"
+category = "jetson-platform"
+tier = "T1"
+summary = "libargus, NvBufSurface, EGL interop"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "l4t-kernel-modules"
+category = "jetson-platform"
+tier = "T1"
+summary = "out-of-tree builds, headers, signing"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "jetson-storage-boot-media"
+category = "jetson-platform"
+tier = "T2"
+summary = "NVMe boot, eMMC, SD"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "jetson-security"
+category = "jetson-platform"
+tier = "T3"
+summary = "secure boot, fuses, disk encryption"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "camera-bringup-csi-mipi"
+category = "camera-bringup"
+tier = "T0"
+summary = "CSI/MIPI camera bring-up"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "camera-bringup-gmsl2"
+category = "camera-bringup"
+tier = "T1"
+summary = "SerDes link config order, link-lock debug"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "camera-bringup-fpdlink"
+category = "camera-bringup"
+tier = "T2"
+summary = "FPD-Link camera bring-up"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "v4l2-subdev-drivers"
+category = "camera-bringup"
+tier = "T1"
+summary = "V4L2 subdev drivers"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "isp-tuning"
+category = "camera-bringup"
+tier = "T2"
+summary = "AE/AWB, tuning files, HDR modes"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "camera-sync-trigger"
+category = "camera-bringup"
+tier = "T1"
+summary = "hardware trigger, PTP, PPS alignment"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "usb-gige-cameras"
+category = "camera-bringup"
+tier = "T2"
+summary = "UVC, GenICam, Aravis"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "lidar-integration"
+category = "other-sensors"
+tier = "T1"
+summary = "packet parsing, motion distortion"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "radar-integration"
+category = "other-sensors"
+tier = "T2"
+summary = "mmWave config, CAN/Ethernet radar"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "imu-integration"
+category = "other-sensors"
+tier = "T1"
+summary = "Allan variance, bias, thermal drift"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "gnss-rtk"
+category = "other-sensors"
+tier = "T2"
+summary = "NTRIP, fix quality, UBX/NMEA"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "wheel-odometry-encoders"
+category = "other-sensors"
+tier = "T2"
+summary = "wheel odometry and encoders"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "time-sync-ptp"
+category = "other-sensors"
+tier = "T1"
+summary = "gPTP, chrony, hardware timestamping"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "can-bus"
+category = "buses-protocols"
+tier = "T0"
+summary = "SocketCAN, CAN-FD, sample point, bus-off recovery"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "automotive-uds-obd"
+category = "buses-protocols"
+tier = "T2"
+summary = "UDS services, DoIP"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "automotive-ethernet"
+category = "buses-protocols"
+tier = "T3"
+summary = "100BASE-T1, SOME/IP, TSN/AVB"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "serial-spi-i2c-debug"
+category = "buses-protocols"
+tier = "T1"
+summary = "analyzer-driven reasoning, clock stretching"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "ros2-dds-tuning"
+category = "buses-protocols"
+tier = "T1"
+summary = "Cyclone/Fast DDS, discovery, shared memory"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "mqtt-fleet-telemetry"
+category = "buses-protocols"
+tier = "T2"
+summary = "store-and-forward, backpressure"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "training-pipelines"
+category = "perception-training"
+tier = "T0"
+summary = "dataloaders, AMP, schedulers, reproducibility"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "detection-architectures"
+category = "perception-training"
+tier = "T1"
+summary = "YOLO family, DETR, anchor-free tradeoffs"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "segmentation-depth"
+category = "perception-training"
+tier = "T2"
+summary = "semantic/instance, mono/stereo depth"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "multi-object-tracking"
+category = "perception-training"
+tier = "T1"
+summary = "ByteTrack/BoT-SORT, ReID, association tuning"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "bev-occupancy"
+category = "perception-training"
+tier = "T2"
+summary = "LSS/BEVFormer family, multi-cam to BEV"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "dataset-curation"
+category = "perception-training"
+tier = "T1"
+summary = "dedup, mining, splits, leakage prevention"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "auto-labeling"
+category = "perception-training"
+tier = "T2"
+summary = "SAM-class, pseudo-labels, QA loops"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "cv-eval-metrics"
+category = "perception-training"
+tier = "T1"
+summary = "mAP variants, HOTA/MOTA, calibration curves"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "domain-adaptation"
+category = "perception-training"
+tier = "T2"
+summary = "night, rain, regional traffic distributions"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "onnx-export-surgery"
+category = "inference-optimization"
+tier = "T0"
+summary = "opsets, dynamic shapes, graph edits"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "tensorrt-quantization"
+category = "inference-optimization"
+tier = "T0"
+summary = "INT8 PTQ/QAT, calibration, mixed precision"
+status = "present"
+golden = ""
+
+[[skill]]
+id = "tensorrt-plugins"
+category = "inference-optimization"
+tier = "T2"
+summary = "custom layers, plugin registry, versioning"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "deepstream-pipelines"
+category = "inference-optimization"
+tier = "T1"
+summary = "nvinfer, tracker, tiler, zero-copy rules"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "gstreamer-debugging"
+category = "inference-optimization"
+tier = "T1"
+summary = "pad probes, caps negotiation, latency tracing"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "hailo-toolchain"
+category = "inference-optimization"
+tier = "T1"
+summary = "DFC, HEF compile, quantization, model zoo"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "cuda-kernel-optimization"
+category = "inference-optimization"
+tier = "T2"
+summary = "coalescing, occupancy, streams"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "edge-inference-serving"
+category = "inference-optimization"
+tier = "T2"
+summary = "batching, multi-stream scheduling"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "ros2-systems"
+category = "robotics-av"
+tier = "T0"
+summary = "lifecycle, composition, launch, params"
+status = "present"
+golden = ""
+
+[[skill]]
+id = "sensor-fusion-estimation"
+category = "robotics-av"
+tier = "T1"
+summary = "EKF/UKF/ESKF, robot_localization"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "slam-localization"
+category = "robotics-av"
+tier = "T2"
+summary = "LIO-SAM family, map management, drift"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "planning-control"
+category = "robotics-av"
+tier = "T2"
+summary = "MPC, pure pursuit, Stanley, lateral/longitudinal"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "vehicle-interface"
+category = "robotics-av"
+tier = "T2"
+summary = "drive-by-wire, actuation limits, e-stop design"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "calibration-extrinsics"
+category = "robotics-av"
+tier = "T1"
+summary = "cam-lidar, cam-imu, targetless"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "simulation-carla"
+category = "robotics-av"
+tier = "T3"
+summary = "scenarios, sensor models, sim2real gap"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "embedded-c-safety"
+category = "embedded-firmware"
+tier = "T0"
+summary = "MISRA-oriented patterns, own words only"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "rtos-zephyr"
+category = "embedded-firmware"
+tier = "T2"
+summary = "device model, threading, power management"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "esp-idf"
+category = "embedded-firmware"
+tier = "T2"
+summary = "partitions, WiFi/BLE, OTA"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "stm32-baremetal"
+category = "embedded-firmware"
+tier = "T2"
+summary = "HAL vs LL, DMA, clock tree"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "bootloaders-ota"
+category = "embedded-firmware"
+tier = "T2"
+summary = "A/B updates, rollback, signing"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "low-power-design"
+category = "embedded-firmware"
+tier = "T2"
+summary = "sleep modes, wake sources, budgets"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "firmware-debugging"
+category = "embedded-firmware"
+tier = "T2"
+summary = "JTAG/SWD, hard fault analysis, tracing"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "linux-realtime"
+category = "systems-production"
+tier = "T1"
+summary = "PREEMPT_RT, isolation, affinity, priorities"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "profiling-nsight"
+category = "systems-production"
+tier = "T1"
+summary = "nsys/ncu timelines, bottleneck attribution"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "memory-debugging"
+category = "systems-production"
+tier = "T1"
+summary = "ASAN/valgrind on edge, leak hunting"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "containerization-edge"
+category = "systems-production"
+tier = "T1"
+summary = "GPU passthrough, image size, runtime"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "fleet-deployment"
+category = "systems-production"
+tier = "T2"
+summary = "OTA, staged rollout, rollback criteria"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "observability-edge"
+category = "systems-production"
+tier = "T2"
+summary = "metrics, log shipping, crash dumps"
+status = "planned"
+golden = ""
+
+[[skill]]
+id = "functional-safety-process"
+category = "systems-production"
+tier = "T3"
+summary = "26262/21448 workflow, own words only"
+status = "planned"
+golden = ""
+
+[existing_methodology_packs]
+# Packs already on disk that are methodology-oriented and do not map
+# 1:1 to a catalog id; kept as-is, to be reconciled during WO-16.
+packs = ["camera-bringup-methodology", "camera-module-selection", "cuda-kernel-safety", "deepgent-verification-workflow", "edge-perf-methodology", "failure-triage", "hailo-ai-accelerator", "int8-calibration-methodology", "multi-board-portability", "power-thermal-tuning", "raspberry-pi-edge-ai", "sensor-latency-tracing"]
